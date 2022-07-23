@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div style="width:100%;height:100%">
     <component :is="MainComponent"  type="border-card" v-model="cur_tab" 
     style="height:100%"  :depth="depth+1"
     @tab-click="tab_click"
@@ -20,11 +20,11 @@
   </div>
 </template>
 <script>
-import {widget_div_layout} from '../fieldsConfig'
 import mixins from "./mixins"
 export default {
   name: 'widget-form-tabs',
   mixins:[mixins],
+  inject:["has_name"],
   components: {  },
   updated(){
       if(this.self.children.column.length>0){
@@ -32,12 +32,11 @@ export default {
             this.editableTabsValue = this.self.children.column[0].label;
       }
       this.self.children.column.forEach(element => {
-          if(this.context.report_result.name_lable_map==undefined)
-              this.context.report_result.name_lable_map={}
           
           if(element.gridName  && element.gridName!="_random_"){
             this.context?.allElementSet.add(element.gridName)  
-            this.context.report_result.name_lable_map[element.gridName]=element
+            if(this.context.mode!='design' && this.context.name_lable_map[this.self.gridName]==undefined)
+              this.context.name_lable_map[element.gridName]=element
           }
       });
   },
@@ -111,15 +110,6 @@ export default {
         if (action === 'add') {
           this.widget_dialogVisible=true
           return
-          let newIndex = (this.self.children.column.length) ;
-          let data={...widget_div_layout(), prop : Date.now() + '_' + Math.ceil(Math.random() * 99999) };
-          let idx=newIndex
-          while(this.self.children.column.find(item=>item.label=='Tab'+idx)){
-            idx++
-          }
-          data.label='Tab'+idx
-          this.$set(this.self.children.column, newIndex, { ...data })
-          this.editableTabsValue = data.label;
         }
         if (action === 'remove') {
           let tabs = this.self.children.column;

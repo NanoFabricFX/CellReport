@@ -92,7 +92,7 @@ namespace reportWeb.Controllers
                     var rg = new ReportGridJSON(item.Value, ps);
                     rg.output(pdf_doc,ref is_first, addTable);
                 }
-                json_root.GetProperty("zb_var").TryGetProperty("watermark", out var watermark);
+                json_root.GetProperty("_zb_var_").TryGetProperty("watermark", out var watermark);
                 add_header_footer(ps, pdfDocument, pdf_doc, watermark);
 
                 //*/
@@ -155,8 +155,15 @@ namespace reportWeb.Controllers
             {
                 foreach(var one in watermark.EnumerateObject())
                 {
-                    mark_dict[one.Name] = one.Value.GetString();
+                    if(one.Value.ValueKind==JsonValueKind.String)
+                        mark_dict[one.Name] = one.Value.GetString();
+                    if (one.Value.ValueKind == JsonValueKind.Number)
+                        mark_dict[one.Name] = one.Value.GetDouble();
                 }
+            }
+            else if (watermark.ValueKind == JsonValueKind.Undefined)
+            {
+
             }
             else
                 mark_dict["watermark_txt"] = watermark.GetString();

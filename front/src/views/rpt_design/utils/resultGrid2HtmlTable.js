@@ -1,5 +1,6 @@
 import {getObjType} from "./util"
 
+let is_Safari = (navigator.userAgent.indexOf("Safari") > -1)
 
 export function dateToString(date){ 
     var year = date.getFullYear(); 
@@ -26,137 +27,86 @@ StringBuilder.prototype.append = function(str){
 StringBuilder.prototype.toString = function(joinGap){  
     return this._stringArray.join(joinGap);  
 }
+ //是否是空值
+ function isRealNull(val) {
+    if (val == null || val.toString().replace(/\s/g, "") == "") {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+//是否是纯数字
+function isRealNum(val) {
+    if (val == null || val.toString().replace(/\s/g, "") === "") {
+        return false;
+    }
+
+    if (typeof val == "boolean") {
+        return false;
+    }
+
+    if (!isNaN(val)) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+function isdatetime(s) {
+    if (s == null || s.toString().length < 5) {
+        return false;
+    }
+    else if(checkDateTime(s)){
+        return true;
+    }
+    else {
+        return false;
+    }
+
+    function checkDateTime(str){
+        var reg1 = /^(\d{4})-(\d{1,2})-(\d{1,2})(\s(\d{1,2}):(\d{1,2})(:(\d{1,2}))?)?$/;
+        var reg2 = /^(\d{4})\/(\d{1,2})\/(\d{1,2})(\s(\d{1,2}):(\d{1,2})(:(\d{1,2}))?)?$/;
+
+        if(!reg1.test(str) && !reg2.test(str)){
+            return false;
+        }
+
+        var year = RegExp.$1,
+            month = RegExp.$2,
+            day = RegExp.$3;
+
+        if(year < 1900){
+            return false;
+        }
+
+        if(month > 12){
+            return false;
+        }
+
+        if(day > 31){
+            return false;
+        }
+
+        if(month == 2){
+            if(new Date(year, 1, 29).getDate() == 29 && day > 29){
+                return false;
+            }
+            else if(new Date(year, 1, 29).getDate() != 29 && day > 28){
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
 //数据排序方法
 function orderbydata(data, index, isAsc) {
     if (isAsc == null) {
         isAsc = true;
     }
-    //是否是空值
-    function isRealNull(val) {
-        if (val == null || val.toString().replace(/\s/g, "") == "") {
-            return true;
-        }
-        else {
-            return false;
-        }
-    }
-    //是否是纯数字
-    function isRealNum(val) {
-        if (val == null || val.toString().replace(/\s/g, "") === "") {
-            return false;
-        }
-
-        if (typeof val == "boolean") {
-            return false;
-        }
-
-        if (!isNaN(val)) {
-            return true;
-        }
-        else {
-            return false;
-        }
-    }
-    function isdatetime(s) {
-        if (s == null || s.toString().length < 5) {
-            return false;
-        }
-        else if (checkDateTime(s)) {
-            return true;
-        }
-        else {
-            return false;
-        }
-
-        function checkDateTime(str) {
-            var reg1 = /^(\d{4})-(\d{1,2})-(\d{1,2})(\s(\d{1,2}):(\d{1,2})(:(\d{1,2}))?)?$/;
-            var reg2 = /^(\d{4})\/(\d{1,2})\/(\d{1,2})(\s(\d{1,2}):(\d{1,2})(:(\d{1,2}))?)?$/;
-
-            if (!reg1.test(str) && !reg2.test(str)) {
-                return false;
-            }
-
-            var year = RegExp.$1,
-                month = RegExp.$2,
-                day = RegExp.$3;
-
-            if (year < 1900) {
-                return false;
-            }
-
-            if (month > 12) {
-                return false;
-            }
-
-            if (day > 31) {
-                return false;
-            }
-
-            if (month == 2) {
-                if (new Date(year, 1, 29).getDate() == 29 && day > 29) {
-                    return false;
-                }
-                else if (new Date(year, 1, 29).getDate() != 29 && day > 28) {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-    }
-
-    function diff(now, then) {
-        return now.localeCompare(then)
-        //return moment(now).diff(moment(then));
-    }
-
-    function isdatetime(s) {
-        if (s == null || s.toString().length < 5) {
-            return false;
-        }
-        else if(checkDateTime(s)){
-            return true;
-        }
-        else {
-            return false;
-        }
-
-        function checkDateTime(str){
-            var reg1 = /^(\d{4})-(\d{1,2})-(\d{1,2})(\s(\d{1,2}):(\d{1,2})(:(\d{1,2}))?)?$/;
-            var reg2 = /^(\d{4})\/(\d{1,2})\/(\d{1,2})(\s(\d{1,2}):(\d{1,2})(:(\d{1,2}))?)?$/;
-
-            if(!reg1.test(str) && !reg2.test(str)){
-                return false;
-            }
-
-            var year = RegExp.$1,
-                month = RegExp.$2,
-                day = RegExp.$3;
-
-            if(year < 1900){
-                return false;
-            }
-
-            if(month > 12){
-                return false;
-            }
-
-            if(day > 31){
-                return false;
-            }
-
-            if(month == 2){
-                if(new Date(year, 1, 29).getDate() == 29 && day > 29){
-                    return false;
-                }
-                else if(new Date(year, 1, 29).getDate() != 29 && day > 28){
-                    return false;
-                }
-            }
-
-            return true;
-        }
-    }
+   
 
     function diff(now, then) {
         return now.localeCompare(then)
@@ -234,8 +184,9 @@ function getScrollBarWidth() {
 }
 const BitArray = require("./bits");
 import {cellFromatCompute} from "./cellFromatCompute"
+import { widget_row_col_layout } from "../fieldsConfig";
 const luckysheet_CFiconsImg = new Image();
-//luckysheet_CFiconsImg.src = "data:image/png;base64,";
+luckysheet_CFiconsImg.src = "cdn/luckysheet/plugins/images/CFicons.png"
 const icon_arr=[]
 function cut_icon_image(l,t){
     if(icon_arr[l] && icon_arr[l][t] )
@@ -279,9 +230,16 @@ export default class ResultGrid2HtmlTable{
         //this.param_grid.need_footer=true
         this.ScrollBarWidth=getScrollBarWidth()
         this.cell_cf={}
+        this.search_cond=null
         let cdf_arr=[]
-        
-        
+        let _this=this
+        this.tree_row_set={};
+        this.tree_node_set=new Set();
+        (this.param_grid.tree_row_list||[]).forEach( one => {
+            this.tree_row_set[one[0]]=one
+            this.tree_node_set.add(one[3])
+        })
+            
         if(!setting.no_use_parent_css)
         {
             let cond=[]
@@ -306,11 +264,19 @@ export default class ResultGrid2HtmlTable{
                 })
         }
         
-        JSON.parse(setting.conditionformat_save??"[]").forEach(x=>{
-            x.cellrange.forEach(xcr=>{
-                xcr.row=[extend_lines[0], extend_lines[1]]
+        JSON.parse(this.param_grid.conditionformat_save??"[]").forEach(item=>{            
+            item.cellrange.forEach(xcr=>{
+                for(let vx=xcr.row[0];vx<=xcr.row[1];vx++ ){
+                    for(let vy=xcr.column[0];vy<=xcr.column[1];vy++ ){
+                        let new_x=JSON.parse(JSON.stringify(item))                        
+                        new_x.cellrange=[]
+                        Enumerable.from( _this.param_grid.abs_to_design).where(one=>one.d== ''+vx+'_'+vy).forEach(one_c_r=>{
+                            new_x.cellrange.push({row:one_c_r.row,column:one_c_r.col})
+                        })
+                        cdf_arr.push(new_x)
+                    }
+                }                
             })
-            cdf_arr.push(x)
         })
         this.cur_page=1
         this.page_size=setting.page_size??20
@@ -321,15 +287,17 @@ export default class ResultGrid2HtmlTable{
         if(tableData.length<=1000)
             this.cell_cf= cellFromatCompute(cdf_arr,tableData)
 
-        this.t_tableData=new Array(tableData.length)
-        this.tableData_bridge=new Array(tableData.length)
+        
+        this.tableData_bridge=new Array(tableData.length)//里面存的是指向原始表的行号
         for(let idx=0;idx<tableData.length;idx++)
             this.tableData_bridge[idx]=idx
-
+        
         //this.convert(0,this.param_grid.extend_lines[0]+this.page_size*2)
-        //setTimeout(() => {
-        //    this.convert(this.param_grid.extend_lines[0]+this.page_size*2,Number.MAX_VALUE)
-        //});
+        setTimeout(() => {
+            //this.convert(this.param_grid.extend_lines[0]+this.page_size*2,Number.MAX_VALUE)
+            this.data_for_sort=this.param_grid.tableData.slice(extend_lines[0],extend_lines[1]+1).map((item,idx)=>{return {"k":idx,'value':item}})
+        
+        });
         this.total_columns=Object.keys(this.param_grid.columnlenArr).length
         this.total_rows=Object.keys(this.param_grid.rowlenArr).length
         this.fix_rows=1
@@ -337,7 +305,7 @@ export default class ResultGrid2HtmlTable{
         if(this.param_grid.optimize &&(this.fix_cols==undefined || this.fix_cols<1)) this.fix_cols=1
 
         this.fix_rows=parseInt( param_grid.fix_rows||Math.max(this.fix_rows,this.param_grid.colName_lines[1]+1) )
-
+        
         
     }
     getData(s_num,e_num){
@@ -384,7 +352,7 @@ export default class ResultGrid2HtmlTable{
         this.param_grid.tableData.slice(s_num,e_num).forEach((rowData,idx)=>{
             let rowNo=idx+s_num
             let newRowData=new Array(Object.keys(this.param_grid.columnlenArr).length)
-            this.t_tableData[rowNo]=newRowData
+            
             rowData.slice(0,-1).forEach((cell,colNo)=>{
                 let m
                 if(rowNo<=this.param_grid.colName_lines[1])
@@ -411,14 +379,14 @@ export default class ResultGrid2HtmlTable{
                 if(bar.valueType=='minus'){
                     cur_cell.style+=`background-image: linear-gradient(to left, #ffffff , #ff0000);
                     background-repeat: no-repeat;
-                    background-size: calc(${bar.minusLen*bar.valueLen*100}% - 0px);
-                    background-position: calc(${bar.minusLen*(1-bar.valueLen)*width}px );`
+                    background-size: calc(${bar.minusLen*bar.valueLen*100}% - 0px) calc(100% - 4px);
+                    background-position: calc(${isNaN((bar.minusLen*(1-bar.valueLen)*width))?0:(bar.minusLen*(1-bar.valueLen)*width)}px ) 2px;`
                 }//用百分比会错位，没找到好的用百分比的方法
                 if(bar.valueType=='plus'){
                     cur_cell.style+=`background-image: linear-gradient(to left, ${bar.format[0]} , ${bar.format.length>1?bar.format[1]:bar.format[0]});
                     background-repeat: no-repeat;
-                    background-size: calc(${bar.plusLen*bar.valueLen*100}% - 0px);
-                    background-position:calc(${(bar.minusLen*width)}px);`
+                    background-size: calc(${bar.plusLen*bar.valueLen*100}% - 0px) calc(100% - 4px);
+                    background-position:calc(${isNaN(bar.minusLen*width)?0:(bar.minusLen*width)}px) 2px;`
                 }                        
             }
             if(local_style.icons){
@@ -435,6 +403,9 @@ export default class ResultGrid2HtmlTable{
         return ""
     }
     total(){
+        let ret= this.tableData_bridge.length -  (this.param_grid.tableData.length - this.param_grid.extend_lines[1]) - this.param_grid.extend_lines[0] + 1
+        console.info(ret +"--"+(this.param_grid.extend_lines[1]- this.param_grid.extend_lines[0] + 1))
+        return ret
         return this.param_grid.extend_lines[1]- this.param_grid.extend_lines[0] + 1
     }
     handleSizeChange(){
@@ -442,6 +413,60 @@ export default class ResultGrid2HtmlTable{
     }
     handleCurrentChange(){
 
+    }
+    search(){
+        let extend_lines=this.param_grid.extend_lines
+        let tmp_arr=this.param_grid.tableData.slice(extend_lines[0],extend_lines[1]+1).map((item,idx)=>{return {"k":idx,'value':item}})
+        if(this.search_cond!=null)
+        {
+            let for_col=this.search_cond.for_col;
+            let traget_value=this.search_cond.target_val;
+            let convert_func=function(a){
+                return a
+            }
+            if(this.search_cond.as_type=="number")
+                convert_func=function(a){
+                    return Number.parseFloat(a)
+                }
+            traget_value=convert_func(traget_value)
+            switch(this.search_cond.relation){
+                case '==':
+                    tmp_arr=Enumerable.from(tmp_arr).where(x=>convert_func(x.value[for_col])==traget_value).toArray();
+                    break;
+                case '!=':
+                    tmp_arr=Enumerable.from(tmp_arr).where(x=>convert_func(x.value[for_col])!=traget_value).toArray();
+                    break;
+                case '>=':
+                    tmp_arr=Enumerable.from(tmp_arr).where(x=>convert_func(x.value[for_col])>=traget_value).toArray();
+                    break;
+                case '>':
+                    tmp_arr=Enumerable.from(tmp_arr).where(x=>convert_func(x.value[for_col])>traget_value).toArray();
+                    break;
+                case '<':
+                    tmp_arr=Enumerable.from(tmp_arr).where(x=>convert_func(x.value[for_col])<traget_value).toArray();
+                    break;                                    
+                case '<=':
+                    tmp_arr=Enumerable.from(tmp_arr).where(x=>convert_func(x.value[for_col])<=traget_value).toArray();
+                    break;                                    
+            }
+        }
+        
+        
+        let bridge_len=tmp_arr.length + (this.param_grid.tableData.length - this.param_grid.extend_lines[1] - 1) + this.param_grid.extend_lines[0]
+        this.tableData_bridge=new Array(bridge_len)
+        // 填充表头
+        for(let idx=0;idx<extend_lines[0];idx++)
+            this.tableData_bridge[idx]=idx
+        // 填充排序好的数据
+        for(let idx=0;idx<tmp_arr.length;idx++)
+            this.tableData_bridge[extend_lines[0]+idx]=extend_lines[0]+tmp_arr[idx].k
+        let end_start=extend_lines[0] + tmp_arr.length 
+        // 填充表尾
+        for(let i=extend_lines[1]+1;i<this.param_grid.tableData.length;i++){
+            this.tableData_bridge[end_start + (i - extend_lines[1] - 1) ]=i
+        }
+        this.data_for_sort=tmp_arr
+        return  this.data_for_sort 
     }
     sort(sort_col){
         if(sort_col!=undefined){
@@ -456,19 +481,26 @@ export default class ResultGrid2HtmlTable{
                 this.sort_col={isAsc:-1,col:sort_col}
             }
             let extend_lines=this.param_grid.extend_lines
-            //let tmp_arr=this.t_tableData.slice(extend_lines[0],extend_lines[1]+1)
-            let tmp_arr=this.param_grid.tableData.slice(extend_lines[0],extend_lines[1]+1).map((item,idx)=>{return {"k":idx,'value':item}})
+            let tmp_arr=this.data_for_sort//this.param_grid.tableData.slice(extend_lines[0],extend_lines[1]+1).map((item,idx)=>{return {"k":idx,'value':item}})
             if(this.sort_col.isAsc==-1)
                 tmp_arr=orderbydata(tmp_arr,Number.parseInt(this.sort_col.col),false)
             else if(this.sort_col.isAsc==1)
                 tmp_arr=orderbydata(tmp_arr,Number.parseInt(this.sort_col.col),true)
-            //else
-            //    tmp_arr=orderbydata(tmp_arr,tmp_arr[0].length-1,true)
+            else
+                tmp_arr=this.search()
+            let bridge_len=tmp_arr.length + (this.param_grid.tableData.length - this.param_grid.extend_lines[1] - 1) + this.param_grid.extend_lines[0]
+            this.tableData_bridge=new Array(bridge_len)
+            // 填充表头
+            for(let idx=0;idx<extend_lines[0];idx++)
+                this.tableData_bridge[idx]=idx
+            // 填充排序好的数据
             for(let idx=0;idx<tmp_arr.length;idx++)
                 this.tableData_bridge[extend_lines[0]+idx]=extend_lines[0]+tmp_arr[idx].k
-            //for(let i=extend_lines[0];i<extend_lines[1]+1;i++){
-            //    this.t_tableData[i]=tmp_arr[i-extend_lines[0]]
-            //}           
+            let end_start=extend_lines[0] + tmp_arr.length 
+            // 填充表尾
+            for(let i=extend_lines[1]+1;i<this.param_grid.tableData.length;i++){
+                this.tableData_bridge[end_start + (i - extend_lines[1] - 1) ]=i
+            }           
         }
     }
     find_config_merge(config_merge,rowNo,colNo){
@@ -517,20 +549,26 @@ export default class ResultGrid2HtmlTable{
         for(let i=0;i<tableBitFlag.length;i++)
             tableBitFlag[i]=new BitArray()
         this.getData(s_row,e_row).forEach((rowData,row_idx)=>{
-        //this.t_tableData.slice(s_row,e_row).forEach((rowData,row_idx)=>{
+            let real_rowno=rowData[rowData.length-1].v
             let rowNo=s_row+row_idx
             let row_type=''
-            if(extend_lines[0]<=rowNo && extend_lines[1]>=rowNo)
-                row_type='detail'
-            else  if(rowNo<colName_lines[0])
+            let row_pr
+            let in_detail=false
+            if(extend_lines[0]<=real_rowno && extend_lines[1]>=real_rowno){
+                row_pr=(this.tree_row_set[real_rowno]? this.tree_row_set[real_rowno][2] :0)
+                row_type='detail' +' data-pr=' + row_pr
+                in_detail=true
+            }
+            else  if(real_rowno<colName_lines[0])
                 row_type='isHead'
-            else  if(rowNo<=colName_lines[1])
+            else  if(real_rowno<=colName_lines[1])
                 row_type='isColumn'
-            else  if(rowNo<extend_lines[0])
+            else  if(real_rowno<extend_lines[0])
                 row_type='isComment'
             else
                 row_type='isComment isAfterExtend'
-            sb.append(`<tr ${row_type} data-n=${rowNo} style='height:${rowlenArr[rowNo]??rowlenArr["default"]}px' >`)
+            sb.append(`<tr ${row_type} data-n=${rowNo} data-old="${row_pr&& row_pr!=0?'none':'table-row'}"
+            style='display:${row_pr&& row_pr!=0?'none':'table-row'}; height:${rowlenArr[rowNo]??rowlenArr["default"]}px' >`)
             
             rowData.forEach((cell,colNo)=>{
                 if(false== col_arr.includes(colNo)){
@@ -542,14 +580,14 @@ export default class ResultGrid2HtmlTable{
                     return;
                 }
                 tableBitFlag[rowNo-s_row].set(colNo ,1)
-                let max_height=rowlenArr[rowNo]??rowlenArr["default"]
+                let max_height=rowlenArr[real_rowno]??rowlenArr["default"]
                 let max_width=columnlenArr[colNo]
                 sb.append(`\n<td `)
-                let r_c=this.find_config_merge(config_merge,rowNo,colNo)//config_merge[`${rowNo}_${colNo}`]
+                let r_c=this.find_config_merge(config_merge,real_rowno,colNo)//config_merge[`${rowNo}_${colNo}`]
                 if(r_c){
                     let {r, c, rs, cs}={...r_c}
                     if(rs>1)
-                        sb.append(` rowspan=${rs}`)
+                        sb.append(`data-oldrs=${rs} rowspan=${ !in_detail || this.param_grid.tree_row_list==undefined?rs:(row_pr&& row_pr!=0?rs:1)}`) 
                     if(cs>1)
                         sb.append(` colspan=${cs}`)
                     max_width=0
@@ -558,9 +596,9 @@ export default class ResultGrid2HtmlTable{
                     }
                     max_height=0
                     for(let ri=0;ri<rs;ri++){
-                        max_height+=rowlenArr[rowNo+ri]
+                        max_height+=rowlenArr[real_rowno+ri]
                         for(let ci=0;ci<cs;ci++){
-                            tableBitFlag[r+ri-s_row]?.set(c+ci ,1)
+                            tableBitFlag[rowNo+ri-s_row]?.set(c+ci ,1)
                         }
                     }
                 }
@@ -568,9 +606,16 @@ export default class ResultGrid2HtmlTable{
                 sb.append(` class=' ${cell.clazz} `)
                 let cell_sort=my_sort[`${rowNo}_${colNo}`]
                 let disp=(cell.m && cell.m.v)? cell.m.v : cell.m
+                
+                if(this.tree_node_set.has(`${rowNo}_${colNo}`))
+                  disp=`<span class='cr_tree_node  '><i class='el-icon-arrow-right'></i></span>` + disp 
                 if(cell?.m?.t=='img'){
                     disp=`<img style="width: 100%;height: 100%;" src='${disp}'>`
-                }
+                }//max-height:${max_height-1}px;
+                let style=`style="max-width:${max_width*this.ratio-4}px;width:${max_width*this.ratio-4}px;`
+                if(!this.setting.auto_line_height && !window.cr_auto_line_height)
+                    style=style+`max-height:${max_height-1}px;`// 不能设置height，否则就不会上下居中了
+                style=style+'"'
                 if(this.optimize && cell_sort!=undefined){
                     sb.append(` cr-sort`)
                     if(this.sort_col.col==colNo){
@@ -579,13 +624,13 @@ export default class ResultGrid2HtmlTable{
                         if(this.sort_col.isAsc==1)
                             sb.append(` cr-sort-asc`)
                    }//不加 max- 会撑破cell和不能居中
-                   sb.append(`' data-c=${colNo} ><div class="cr-cell" style="max-height:${max_height-1}px;max-width:${max_width*this.ratio}px"> 
-                   <span>${disp??''}</span>
-                   <span class="cr-sort-icon"></span>
+                   sb.append(`' data-c=${colNo} ><div class="cr-cell" ${style}><span>${disp??''}</span>`)
+                   sb.append(`<span class="cr-sort-icon"></span>
+                   <span class="cr-search-icon"></span>
                    </div></td>`)
                 }
                 else
-                    sb.append(`' data-c=${colNo}><div class="cr-cell" style="max-height:${max_height-1}px;max-width:${max_width*this.ratio}px"> ${disp??''}</div></td>`)
+                    sb.append(`' data-c=${colNo}><div class="cr-cell" ${style}> ${disp??''}</div></td>`)
             })
             if(gutter)
                 sb.append(`<td class="gutter"></td>`)
@@ -655,7 +700,7 @@ export default class ResultGrid2HtmlTable{
         min_width=Math.min(this.el.clientWidth-this.ScrollBarWidth-2, table_obj.table_width+(this.ratio==1?0:this.ScrollBarWidth))
         sb.append(`<div id='reportDiv${this.param_grid.name}' class="cr-table__body-wrapper is-scrolling-middle" 
         style='background-color:${background_color};height: calc(100% - ${head_height+foot_height}px);width:${min_width+this.ScrollBarWidth+3}px'>\n
-        <table class='cr-table__body  reportDefaultCss' height=${table_obj.table_height} width=${table_obj.table_width} `)
+        <table class='cr-table__body  reportDefaultCss'  width=${table_obj.table_width} `)  //height=${table_obj.table_height}
         add_other()
         sb.append(table_obj.sb.toString(''))
         height=height+table_obj.table_height
@@ -673,8 +718,8 @@ export default class ResultGrid2HtmlTable{
             table_obj=this._inner_table(start_row,this.fix_rows,  build_col_arr(0,this.fix_cols))
             sb.append(`<div class="cr-table__fixed" style="width: ${table_obj.table_width+1}px; height:calc(100% - ${this.ScrollBarWidth}px);">`)
             
-            sb.append(`<div class='cr-table__fixed-header-wrapper'  style='background-color:${background_color};' >\n
-            <table class='cr-table__header reportDefaultCss' height=${table_obj.table_height} width=${table_obj.table_width}  `)
+            sb.append(`<div id='reportDiv${this.param_grid.name}TopLeft' class='cr-table__fixed-header-wrapper'  style='background-color:${background_color};' >\n
+            <table class='cr-table__header reportDefaultCss' width=${table_obj.table_width}  `)  //height=${table_obj.table_height}
             add_other()
             sb.append(table_obj.sb.toString(''))
             // 固定列，body
@@ -685,7 +730,7 @@ export default class ResultGrid2HtmlTable{
                     build_col_arr(0,this.fix_cols))
             sb.append(`<div id='reportDiv${this.param_grid.name}Left' class="cr-table__fixed-body-wrapper" 
             style='background-color:${background_color};top: ${head_height+0.5}px;height: calc(100% - ${head_height+foot_height}px)'>\n
-            <table class='cr-table__body  reportDefaultCss' height=${table_obj.table_height} width=${table_obj.table_width}  `)
+            <table class='cr-table__body  reportDefaultCss'  width=${table_obj.table_width}  `)  //height=${table_obj.table_height}
             add_other()
             sb.append(table_obj.sb.toString(''))
 
@@ -713,35 +758,61 @@ export default class ResultGrid2HtmlTable{
             }
             }catch{}
         }
-        sb.append(`<style type="text/css">`)
-        alter_format_arr=alter_format_arr.concat(JSON.parse(this.setting.alternateformat_save??'[]'))
-        alter_format_arr.forEach(x=>{
-            let {head,one,two,foot}= {...x.format}
-            let [s_col,e_col]=[...x.cellrange.column]
-            for(let idx=s_col;idx<=e_col;idx++){
-                if(alter_format_arr.length==1)
-                sb.append(`tr[isHead]  td {background-color:${head.bc};color:${head.fc};}`)
-                sb.append(`
-                    tr[isColumn]  td[data-c${idx>=0?'="'+idx+'"':''}] {background-color:${head.bc};color:${head.fc}; border: 1px solid #bdbcbc;}
-                    tr[isComment]:not([isAfterExtend] ) td[data-c${idx>=0?'="'+idx+'"':''}] {background-color:${foot.bc};border: 1px solid #bdbcbc;}
-                    tr:nth-child(odd)[Detail]  td[data-c${idx>=0?'="'+idx+'"':''}] {background-color:${one.bc}; color:${one.fc};   border: 1px solid #bdbcbc;}
-                    tr:nth-child(even)[Detail] td[data-c${idx>=0?'="'+idx+'"':''}] {background-color:${two.bc}; color:${two.fc};border: 1px solid #bdbcbc;}
+        let grid_id=this.param_grid.name
+        function inner_append_css(idx,head,foot,one,two){
+            sb.append(`
+                    #cr_id_${grid_id} tr[isColumn]  td[data-c${idx>=0?'="'+idx+'"':''}] {background-color:${head.bc};color:${head.fc}; border: 1px solid #bdbcbc;}
+                    #cr_id_${grid_id} tr[isComment]:not([isAfterExtend] ) td[data-c${idx>=0?'="'+idx+'"':''}] {background-color:${foot.bc};border: 1px solid #bdbcbc;}
+                    #cr_id_${grid_id} tr:nth-child(odd)[Detail]  td[data-c${idx>=0?'="'+idx+'"':''}] {background-color:${one.bc}; color:${one.fc};   border: 1px solid #bdbcbc;}
+                    #cr_id_${grid_id} tr:nth-child(even)[Detail] td[data-c${idx>=0?'="'+idx+'"':''}] {background-color:${two.bc}; color:${two.fc};border: 1px solid #bdbcbc;}
                     .form_query_button {background-color:${head.bc};color:${head.fc};}
                     `)
+        }
+        sb.append(`<style type="text/css">`)
+        alter_format_arr=alter_format_arr.concat(JSON.parse(this.param_grid.alternateformat_save??'[]'))
+        alter_format_arr.forEach(x=>{
+            let {head,one,two,foot}= {...x.format}
+            for(let idx=x.cellrange.column[0];idx<=x.cellrange.column[1];idx++){
+                if(alter_format_arr.length==1)
+                    sb.append(`#cr_id_${grid_id} tr[isHead]  td {background-color:${head.bc};color:${head.fc};}`)
+                if(idx<0)
+                    inner_append_css(idx,head,foot,one,two)
+                else
+                {
+                    for(let vx=x.cellrange.row[0];vx<=x.cellrange.row[1];vx++ ){
+                        Enumerable.from( this.param_grid.abs_to_design).where(one=>one.d== ''+vx+'_'+idx).forEach(one_c_r=>{
+                            for(let vy=one_c_r.col[0];vy<=one_c_r.col[1];vy++)
+                            inner_append_css(vy,head,foot,one,two)  
+                        })
+                    }
+                }  
             }
             
         })
-        sb.append("\n</style>\n")  
-        sb.append("<style>\n")
+        //sb.append("\n</style>\n")  
+        //sb.append("<style >\n")
         Object.entries(this.param_grid.styles).forEach(([key, value])=>{
-            sb.append(".").append(key).append(' {').append(value).append("}\n")
+            sb.append(".").append(key).append(' {')
+            //if(is_Safari)
+            sb.append(value.replaceAll("0.5pt ",'1px '))
+            //else sb.append(value)
+            sb.append("}\n")
         })
-        sb.append(".reportDefaultCss{").append(this.param_grid.reportDefaultCss).append("}\n")
-        sb.append(`.cr-cell {margin: 0;
-            padding: 0 4px;
-            white-space: wrap;
-            word-wrap: normal;
-            overflow: hidden;            
+        /*
+            $("#reportDivmain").on('click', 'tr', function () {
+                $(this).siblings('tr').removeClass('active-row');
+                $(this).addClass('active-row');
+            });
+        */
+        sb.append(".reportDefaultCss{").append(this.param_grid.reportDefaultCss)
+        .append(`}
+        tr.hover-row>td ${window.cr_hover_row||'{background-color:lightgray!important;}'}
+        tr.active-row>td  ${window.cr_active_row || '{background-color: #7cbcfc!important;}'}
+            .cr-cell {margin: 0;box-sizing: border-box;
+                padding: 0 2px;
+                white-space: wrap;
+                word-wrap: normal;
+                overflow: hidden; 
             }
             .cr-sort .cr-sort-icon {
                 display: inline;
@@ -757,6 +828,9 @@ export default class ResultGrid2HtmlTable{
                 display: inline;
                 padding: 0 13px 0 0;
                 background: url(img/datagrid_icons.png) no-repeat -16px center;
+            }
+            .cr_tree_node {
+                display: inline-block;
             }
             `)
         sb.append("</style>")      

@@ -79,6 +79,7 @@ export function test_expr(expr) {
 export function grid_range_level(report) {
     let data=new FormData();
     data.append('content',x2jsone.js2xml({report}))
+    data.append('reportName',report.reportName)
     return request({
         method: 'post',
         data,
@@ -88,13 +89,15 @@ export function grid_range_level(report) {
     })
 }
 
-export function save_one(report,zb_data) {
+export function save_one(report,zb_data,imgFile) {
     let arr=report.reportName.split(":")
     let grpId=arr[0]
     let reportFilePath=arr[1]
     let data=new FormData();
     data.append('reportName',reportFilePath)
     data.append('content',x2jsone.js2xml({report}))
+    if(imgFile)
+        data.append('imgFile', imgFile)
     if(zb_data && zb_data.zb_dict){
         data.append('zb_dict_str',JSON.stringify( zb_data.zb_dict))
     }
@@ -130,7 +133,7 @@ export async function saveWidget(txt) {
     })
 }
 
-export async function preview_one(_this,createFormParam=false,query_data={},param_name=null) {
+export async function preview_one(_this,createFormParam=false,param_name=null) {
     
     _this.context.report.params.param?.forEach(ele=>{
         if(ele.tagValue && ele.tagValue.length==0)
@@ -185,7 +188,7 @@ export async function preview_one(_this,createFormParam=false,query_data={},para
         data.append("_createFormParam", createFormParam??false)
         if(param_name!=null)
             data.append("_param_name_", param_name)
-        Object.entries(query_data).forEach(kv=>{
+        Object.entries(_this.queryForm).forEach(kv=>{
             data.append(kv[0], kv[1])    
         })
         request({
@@ -279,21 +282,21 @@ export async function preview_one(_this,createFormParam=false,query_data={},para
     })
 }
 const conf_loading_conf={type: 'loading',options: {fullscreen: true,lock: true,text: '正在载入...',spinner: 'el-icon-loading',background: 'rgba(0, 0, 0, 0.8)'}}
-export function run_one(_this,reportFilePath,query,query_data={},_param_name_=null,loading_conf=null) {
+export function run_one(_this,reportFilePath,_param_name_=null,loading_conf=null) {
     if(loading_conf==null)
         loading_conf=conf_loading_conf
     let data=new FormData();
-    Object.entries(query_data).forEach(kv=>{
+    Object.entries(_this.queryForm).forEach(kv=>{
         data.append(kv[0], kv[1])    
     })
-    let _fresh_ds=query_data._fresh_ds
+    let _fresh_ds=_this.queryForm._fresh_ds
     loading.show(loading_conf)
     data.append("reportName", reportFilePath)
     if(_param_name_!=null)
         data.append("_param_name_", _param_name_)
     let url
     if(window.location.pathname.endsWith("run.html"))
-        _this.in_exec_url.run_url=`${baseUrl}/report5/run${_this.grpId==0?"":":"+_this.grpId}?`+query
+        _this.in_exec_url.run_url=`${baseUrl}/report5/run${_this.grpId==0?"":":"+_this.grpId}?`+_this.queryPara
     else
         _this.in_exec_url.run_url=window.location.href
     request({
@@ -315,9 +318,11 @@ export function run_one(_this,reportFilePath,query,query_data={},_param_name_=nu
         _this.$notify({title: '提示',message: response_data.message,duration: 0});
         return;
         }
-        if(response_data.zb_var.watermark){
+        if(response_data.zb_var) //兼容老写法
+            response_data._zb_var_=response_data.zb_var
+        if(response_data._zb_var_.watermark){
             $(".mask_div").remove()
-            _this.watermark(response_data.zb_var.watermark);
+            _this.watermark(response_data._zb_var_.watermark);
         }
         response_data.form.forEach(ele=>{
             let val=ele.value
@@ -429,17 +434,10 @@ export function run_one(_this,reportFilePath,query,query_data={},_param_name_=nu
         _this.isShow=false
         setTimeout(() => {
             _this.isShow=true
+            _this.refresh_layout(null,_this)
+            
             loading.hide(loading_conf)
-            setTimeout(() => {
-                _this.$nextTick(x=>{
-                    let form_h=_this.$refs.form?_this.$refs.form.clientHeight:0
-                    _this.$refs.report_pane.style.height=`calc(100% - ${form_h}px)`
-                    try{
-                    document.title = _this.result.data[Object.keys(_this.result.data)[0]].title
-                    }catch(ex){}
-                    if(window.after_show_report_hook){window.after_show_report_hook()}
-                })
-            });
+            
         });
     }).catch(error=> {
         loading.hide(loading_conf) 
@@ -538,6 +536,17 @@ export function test_zcm(zcm) {
     return request({
         method: 'post',
         url: `${baseUrl}/user/test_zcm/` ,    
+        data,    
+        withCredentials: true
+    })
+}
+
+export function getImgFileList(path) {
+    let data=new FormData();
+    data.append("path", path)
+    return request({
+        method: 'post',
+        url: `${baseUrl}/design/getImgFileList/` ,    
         data,    
         withCredentials: true
     })

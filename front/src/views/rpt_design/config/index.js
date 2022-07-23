@@ -19,9 +19,13 @@ import Title from './title.vue'
 import cr_htmltext from './cr_htmltext.vue'
 import cr_echarts from './cr_echarts.vue'
 import cr_report from './cr_report.vue'
+import cr_text from './cr_text.vue'
+import cr_span from './cr_span.vue'
+import codemirror from "../element/vue-codemirror.vue";
 
 const components = [
-  Custom,cr_htmltext,cr_echarts,cr_report,
+  Custom,cr_htmltext,cr_echarts,cr_report,cr_text,cr_span,
+  codemirror,
   Input,
   Textarea,
   Number,
@@ -38,7 +42,8 @@ const components = [
   Map,
   Group,
   Array,
-  Title
+  Title,
+
 ]
 
 const Config = {

@@ -1,4 +1,5 @@
 import {getLuckyStyle,numToString } from "./util.js"
+const BitArray = require("./bits");
 let color_convert = require('onecolor');
 
 //如果使用 FileSaver.js 就不要同时使用以下函数
@@ -26,7 +27,7 @@ function find_style(tbl,rowNo,colNo,cur_tbl_class_dict){
   }
   let default_css
   function parse_elelment(x_ele){
-    let ccc
+    let ccc,i_idx
     let ret={'font':{},'alignment':{},'border':{},'fill':{}};
     x_ele.split(";").forEach(element => {
         if(element=="")
@@ -34,11 +35,19 @@ function find_style(tbl,rowNo,colNo,cur_tbl_class_dict){
         let one_pair=element.split(":")
         switch(one_pair[0].trim()){
           case "background-color":
+            i_idx=one_pair[1].indexOf("!")
+            if(i_idx>0)
+              ccc=color_convert(one_pair[1].substring(0,i_idx))
+            else
             ccc=color_convert(one_pair[1])
             if(ccc)
               ret['fill']['fgColor']={argb:ccc.hex().substring(1)}
             break
           case "color":
+            i_idx=one_pair[1].indexOf("!")
+            if(i_idx>0)
+              ccc=color_convert(one_pair[1].substring(0,i_idx))
+            else
             ccc=color_convert(one_pair[1])
             if(ccc)
               ret['font']['color']={argb:ccc.hex().substring(1)}
@@ -106,12 +115,32 @@ function find_style(tbl,rowNo,colNo,cur_tbl_class_dict){
     })
     return cur_tbl_class_dict
   }
-export  async function exceljs_inner_exec(_this_result){
+
+function find_config_merge(result_tbl,rowNo,colNo){
+  let {optimize,config_merge,abs_to_design,extend_lines}={...result_tbl}
+  if(optimize){
+      if(rowNo>=extend_lines[0] && rowNo<=extend_lines[1]){
+          let t=config_merge[`${extend_lines[0]}_${colNo}`]
+          return 
+      }
+      else
+          return config_merge[`${rowNo}_${colNo}`]
+  }
+  for(let idx=0;idx<abs_to_design.length;idx++){
+      let one=abs_to_design[idx]
+      if(one.row[0]<=rowNo && rowNo<=one.row[1]
+          && one.col[0]<=colNo && colNo<=one.col[1]){
+              return config_merge[`${rowNo}_${colNo}`]
+      }
+  }
+}  
+const http_src_pattern=/<img [^>]*src=['"]([^'"]+)[^>]*>/gi  
+export  async function exceljs_inner_exec(_this_result,name_lable_map){
     const wb = new ExcelJS.Workbook();
     let ws ,title,one_obj
-    Object.keys( _this_result?.name_lable_map).forEach(one => {
-      
-        one_obj=_this_result?.name_lable_map[one]
+    let allSheetNames=new Set()
+    Object.keys( name_lable_map).forEach(one => {
+        one_obj=name_lable_map[one]
         if(one_obj.component=="luckySheetProxy"){
           title=one_obj.label??one
           let cur_table=_this_result.data[one]
@@ -119,8 +148,9 @@ export  async function exceljs_inner_exec(_this_result){
           if (cur_table.type== "common"){
             //if(cur_table.optimize==true &&
             //  cur_table.columns.slice(-1)=="key")
-            //while(wb.SheetNames.includes(title)) //_worksheets[1].name
-            //  title=title+one_obj.gridName
+            while(allSheetNames.has(title)) //_worksheets[1].name
+              title=title+one_obj.gridName
+            allSheetNames.add(title)
             ws =wb.addWorksheet(title,{pageSetup:{fitToPage: false} });
             let col_width_arr=[]
             //1磅pt = 1/72 英寸
@@ -132,17 +162,73 @@ export  async function exceljs_inner_exec(_this_result){
               col_width_arr[c[0]]={width:c[1] *10 /72 } 
             })
             ws.columns =col_width_arr
-
+            let tableBitFlag =new Array()
+            for(let i=0;i<cur_table.tableData.length;i++)
+                tableBitFlag[i]=new BitArray()
             let line_no=0
             let column_nums=Object.keys( cur_table.columnlenArr).length
-            cur_table.tableData.forEach(one_line=>{                                    
-              ws.addRow(one_line.slice(0,column_nums))
+            cur_table.tableData.forEach(one_line=>{   
+              
+              ws.addRow(one_line.slice(0,column_nums))//添加数据到excel
               let col_no=0
+              const row = ws.getRow(line_no+1)// 从1 开始计数，设置行高
+              row.height= (cur_table.rowlenArr[line_no]??cur_table.rowlenArr["default"] )*72/96
+
               one_line.forEach(one_cell => {
                 if(col_no>=column_nums)
-                  return
+                  return   
+                if(tableBitFlag[line_no].get(col_no))
+                {
+                    return;
+                }
+                tableBitFlag[line_no].set(col_no ,1)
+                let r_c=find_config_merge(cur_table,line_no,col_no)//config_merge[`${rowNo}_${colNo}`]
+                if(r_c){
+                    let {r, c, rs, cs}={...r_c}
+                    for(let ri=0;ri<rs;ri++){
+                        for(let ci=0;ci<cs;ci++){
+                            tableBitFlag[r+ri]?.set(c+ci ,1)
+                        }
+                    }
+                }
+                let name=numToString(col_no+1)+(line_no+1)      //excel 单元格名字       
+                if(one_cell && one_cell.indexOf("<img")>=0){
+                  let imageId2=null
+                  let script_result;
+                  while ((script_result = http_src_pattern.exec(one_cell)) != null)  {
+                      let match_result=script_result[1];
+                      if(match_result && match_result.length>0){
+                        if(match_result.startsWith("http")){
+                          imageId2 = wb.addImage({
+                            filename: match_result,
+                            extension: 'png',
+                          });
+                        }else if(match_result.startsWith("data")){
+                          imageId2 = wb.addImage({
+                            base64filename: `img/${name}.png`,
+                            base64: match_result,
+                            extension: 'png'
+                          });
+                         
+                        }
+                      }
+                  }
+                  ws.getCell(name).value=""
+                  let m=cur_table.config_merge[`${line_no}_${col_no}`]
+                  if(m){
+                    ws.addImage(imageId2, numToString(m.c+1) + (m.r+1)+":"+ numToString(m.c+m.cs)+ (m.r+m.rs));
+                  }else{                  
+                    ws.addImage(imageId2, name+":"+name);
+                  }
+                  //ws.addBackgroundImage(imageId2);
+                }
+                //else  if(one_cell && one_cell.startsWith("<")>=0){
+                //  let excel_cell=ws.getCell(name)
+                //  excel_cell.value=""
+                //  excel_cell.html= '<div>' + one_cell + '</div>';
+                //}
                 let ret=find_style(cur_table,line_no,col_no,cur_tbl_class_dict)
-                let name=numToString(col_no+1)+(line_no+1)
+                
                 let cur_cell=ws.getCell(name);
                 ['font','alignment','border','fill'].forEach(p=>{
                   if(ret[p]){
@@ -158,6 +244,7 @@ export  async function exceljs_inner_exec(_this_result){
               ws.mergeCells(numToString(m.c+1) + (m.r+1)+":"+ numToString(m.c+m.cs)+ (m.r+m.rs));
             })                
           }
+          
           if (_this_result.data[one].type== "large"){
             ws= XLSX.utils.aoa_to_sheet(_this_result.data[one].tableData)
             let header_len=_this_result.data[one].tableData.length
@@ -175,3 +262,72 @@ export  async function exceljs_inner_exec(_this_result){
     const buffer = await wb.xlsx.writeBuffer();
     saveAs(new Blob([buffer], { type: "application/octet-stream"}), "这里是下载的文件名" + ".xlsx");
   }
+  function s2ab(s) {
+    if (typeof ArrayBuffer !== 'undefined') {
+        var buf = new ArrayBuffer(s.length);
+        var view = new Uint8Array(buf);
+        for (var i = 0; i != s.length; ++i) view[i] = s.charCodeAt(i) & 0xFF;
+        return buf;
+    } else {
+        var buf = new Array(s.length);
+        for (var i = 0; i != s.length; ++i) buf[i] = s.charCodeAt(i) & 0xFF;
+        return buf;
+    }
+}
+  export function xlsxjs_inner_exec(_this,name_lable_map){
+      const wb = XLSX.utils.book_new()
+      
+      let ws ,title,one_obj
+      Object.keys( name_lable_map).forEach(one => {
+          one_obj=name_lable_map[one]
+          if(one_obj.component=="ele-grid"){
+            let {__valid_data__,valid_fileds,real_data}=build_chart_data(one_obj.datasource,{report_result:_this.result,clickedEle:_this.clickedEle,
+                allElementSet:_this.allElementSet,},one_obj.fields)
+            //let tableData = convert_array_to_json(__valid_data__)
+            ws= XLSX.utils.aoa_to_sheet(__valid_data__)
+            Object.entries(ws).forEach(([k,cell])=>{
+              if(k=="!ref")
+                return
+              cell.s = {									//为某个单元格设置单独样式
+                font: {
+                  name: '宋体',
+                  sz: 24,
+                  bold: true,
+                  color: { rgb: "red" }
+                },
+                alignment: { horizontal: "center", vertical: "center", wrap_text: true },
+                fill: { bgcolor: { rgb: 'ffff00' } }
+              }
+            })
+            title=one_obj.label??one
+          }
+          else if(one_obj.component=="luckySheetProxy"){
+            if (_this.result.data[one].type== "common"){
+              ws= XLSX.utils.aoa_to_sheet(_this.result.data[one].tableData)
+              ws['!merges']=[]
+              Object.keys( _this.result.data[one].config_merge).forEach(ele_m=>{
+                let m=_this.result.data[one].config_merge[ele_m]
+                ws['!merges'].push({s:{c:m.c,r:m.r},e:{c:m.c+m.cs-1,r:m.r+m.rs-1}})
+                              
+              })
+              title=one_obj.label??one
+            }
+            if (_this.result.data[one].type== "large"){
+              ws= XLSX.utils.aoa_to_sheet(_this.result.data[one].tableData)
+              let header_len=_this.result.data[one].tableData.length
+              XLSX.utils.sheet_add_json (ws,_this.result.data[one].data, { origin: { r: header_len, c: 0 }})
+              title=one_obj.label??one
+            }
+          }
+          if(ws==undefined)
+            return
+          while(wb.SheetNames.includes(title))
+            title=title+one_obj.gridName
+          XLSX.utils.book_append_sheet(wb, ws, title.replace(/[\\|/|?|*|\[|\]]/,'_'))
+          ws=undefined
+      });
+      const wopts = { bookType: 'xlsx', bookSST: true, type: 'binary' };//这里的数据是用来定义导出的格式类型 
+      saveAs(new Blob([s2ab(XLSX.write(wb, wopts))], { type: "application/octet-stream"}), 
+      "这里是下载的文件名" + ".xlsx");
+
+    }

@@ -40,8 +40,11 @@ export default {
         'data.fresh_ds'(){
             if(this.data.fresh_params==undefined)
                 this.data.fresh_params=[]
-            if(this.data.fresh_ds.length==0){
-                this.data.fresh_params.splice(0)
+            if(this.data.fresh_ds.length==0 )
+            {
+                if(this.data.fresh_params.length>0){
+                    this.data.fresh_params.splice(0)
+                }
             }else{
                 if(this.data.fresh_params.length==0){
                     let conf=this.data
@@ -83,7 +86,7 @@ export default {
                     ret.push(`表格:${element._name}`)
                 });
             let t_fresh_ds=[]
-            this.data.fresh_ds.forEach(x=>{ 
+            this.data.fresh_ds?.forEach(x=>{ 
                 if(ret.includes(x))
                     t_fresh_ds.push(x)
             })

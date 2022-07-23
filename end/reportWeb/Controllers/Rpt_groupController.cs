@@ -33,11 +33,12 @@ namespace reportWeb.Controllers
             var rpt_config=_context.Rpt_config.FirstOrDefault();
             if (cur_userid != "admin")
                 grp_register = grp_register.FindAll(x => x.owner == cur_userid);
+            var zc_dict=CellReport.util.KeyAndPassword.yan_zheng_zcm(rpt_config?.zcm);
             return new JsonResult ( new {
                 grp_register,
                 login_script= rpt_config?.login_script,
                 machine_key = CellReport.util.KeyAndPassword.getMachine_key(),
-                is_zc=!String.IsNullOrEmpty(CellReport.util.KeyAndPassword.yan_zheng_zcm(rpt_config?.zcm)),
+                zc_dict = zc_dict,
                 zcm= rpt_config?.zcm,
                 version= CellReport.util.KeyAndPassword.getVersion(),
                 link_type =DbProviderFactories.GetProviderInvariantNames()
@@ -67,7 +68,7 @@ namespace reportWeb.Controllers
             {
                 return BadRequest();
             }
-            rpt_group?.db_connection_list.ForEach(one =>
+            rpt_group?.db_connection_list?.ForEach(one =>
             {
                 one.grp_id = rpt_group.Id;
             });
@@ -80,7 +81,7 @@ namespace reportWeb.Controllers
             else
                 _context.Entry(rpt_group).State = EntityState.Added;
             List<int> all_conn_id_list = new List<int>();
-            rpt_group?.db_connection_list.ForEach(one =>
+            rpt_group?.db_connection_list?.ForEach(one =>
             {
                 if (Rpt_connectionExists(one.Id))
                 {
@@ -94,7 +95,7 @@ namespace reportWeb.Controllers
                     _context.Rpt_db_connection.Remove(x);
                 }
             });
-            rpt_group?.db_connection_list.ForEach(one =>
+            rpt_group?.db_connection_list?.ForEach(one =>
             {
                 if (del_conn_id_list.Contains(one.Id))
                     return;
