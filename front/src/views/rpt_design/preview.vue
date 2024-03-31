@@ -22,6 +22,15 @@
         </div>
 
     </el-dialog> 
+    <el-dialog v-draggable v-if="dync_item_dialogVisible" style="text-align: left;" 
+          :visible.sync="dync_item_dialogVisible" 
+          :close-on-click-modal="false" direction="btt" append-to-body v-bind="{...{'custom-class':'dync_dialog',title:'信息'},...dync_item.dialog_params||{} }"
+        > 
+      <div v-bind="{...{style:'height:50vh'},...dync_item.params||{}}">
+        <widget-form-item  :self="dync_item"  >  </widget-form-item>
+      </div>
+    </el-dialog>
+
     <div style="position: absolute;right:40px;top:10px;">
     <div v-if="!executed || showLog" style="display:inline-block;">  
       <div v-for="([key,val]) in Object.entries(ds_log)" :key="key" style="display:inline-block;padding-right:20px">
@@ -58,17 +67,20 @@
   </div>
   <template v-else>
     <div id="report_app" style="display:flex;flex-direction:column;height:100%" >
-    <div ref="form"> 
-      <el-form :inline="true" v-if="previewFormParam.form">
+    <div ref="div_form"> 
+      <el-form ref="form" inline  v-if="previewFormParam.form" :model="queryForm">
         <input hidden v-for="one in previewFormParam.form.filter(x=>x.hide=='True')" :key="one.name" v-model="queryForm[one.name]"/>
-        
-      
-        <div style="display:inline" v-for="one in previewFormParam.form.filter(x=>x.hide=='False')" :key="one.name">
-          <el-form-item :label="one.prompt">
+        <el-form-item :label="one.prompt" v-for="one in previewFormParam.form.filter(x=>x.hide=='False')" :key="one.name"
+           :prop="one.name" :rules="result.defaultsetting.cr_front_validate=='true' && one.allowSpace=='False'? {required: true, message: '请选择', trigger: 'change' } :null">
           <el-input v-if="one.data_type=='string' && one.tagValueList.length==0 && one.canUsedValueFrom!='Query' " v-model="queryForm[one.name]"></el-input>
           <el-select v-if="['string','int'].includes(one.data_type) && one.canUsedValueFrom!='Query' && one.tagValueList.length>0 " v-model="queryForm[one.name]" 
-            collapse-tags @change="change_param(one.name)" clearable filterable  
+            collapse-tags @change="change_param(one.name)" clearable filterable default-first-option 
+            :allow-create="one.allowCreate=='True'" 
             :multiple="one.allowMutil=='False'?false:true">
+            <li v-if="one.allowMutil=='False'?false:true" class="el-select-dropdown__item">
+              <el-link type="primary" style="float: left" @click="queryForm[one.name]=one.tagValueList.map(x=>x[1])"> 全选</el-link>
+              <el-link type="primary"  style="float: right; color: #8492a6; font-size: 13px" @click="queryForm[one.name]=[]"> 全不选</el-link>
+            </li>
              <el-option
                 v-for="item in one.tagValueList"
                 :key="item[1]"
@@ -78,8 +90,13 @@
           </el-select>  
           
           <el-select v-if="['string','int'].includes(one.data_type) && one.canUsedValueFrom=='Query' && one.parent_valueField_kyz=='' " v-model="queryForm[one.name]" 
-            collapse-tags @change="change_param(one.name)" clearable filterable
+            collapse-tags @change="change_param(one.name)" clearable filterable default-first-option 
+            :allow-create="one.allowCreate=='True'" 
             :multiple="one.allowMutil=='False'?false:true">
+            <li v-if="one.allowMutil=='False'?false:true" class="el-select-dropdown__item">
+              <el-link type="primary" style="float: left" @click="queryForm[one.name]=convert_param_array_to_json(previewFormParam.dataSet[one.dataSetName_kyz][0],one).map(x=>x[one.valueField_kyz]+'')"> 全选</el-link>
+              <el-link type="primary"  style="float: right; color: #8492a6; font-size: 13px" @click="queryForm[one.name]=[]"> 全不选</el-link>
+            </li>
              <el-option
                 v-for="item in convert_param_array_to_json(previewFormParam.dataSet[one.dataSetName_kyz][0],one)"
                 :key="item[one.valueField_kyz]+''"
@@ -88,7 +105,7 @@
               </el-option>
           </el-select>  
         <el-cascader v-if="['string','int'].includes(one.data_type) && one.canUsedValueFrom=='Query' && one.parent_valueField_kyz!='' " v-model="queryForm[one.name]" 
-            collapse-tags clearable @change="change_param(one.name)"
+            collapse-tags clearable filterable @change="change_param(one.name)" :show-all-levels="one.showAllLevels!='False'"
             :multiple="one.allowMutil=='False'?false:true" :options="convert_param_array_to_tree(previewFormParam.dataSet[one.dataSetName_kyz][0],one)"
                 :props="{checkStrictly:true, emitPath:false,multiple:one.allowMutil=='False'?false:true,value:one.valueField_kyz,label:one.tagField_kyz}"
                 >
@@ -97,13 +114,24 @@
           <el-date-picker v-if="one.data_type=='date'" value-format="yyyy-MM-dd" 
                     v-model="queryForm[one.name]"></el-date-picker> 
           <el-date-picker v-if="['datetime','dateTime'].includes( one.data_type)" :value-format="one.dateTimeFormat" :format="one.dateTimeFormat" 
-          :type="['yyyyMM','yyyy-MM'].includes(one.dateTimeFormat)?'month':'datetime'"
+          :type="one.dateTimeFormat=='yyyy'?'year':( ['yyyyMM','yyyy-MM'].includes(one.dateTimeFormat)?'month':'datetime')"
                     v-model="queryForm[one.name]"></el-date-picker>
-          </el-form-item>
+          <el-date-picker v-if="['dates'].includes( one.data_type)" value-format="yyyy-MM-dd" 
+          :type="'dates'" v-model="queryForm[one.name]"></el-date-picker>
+
+          <el-date-picker v-if="['daterange'].includes( one.data_type)" value-format="yyyy-MM-dd" 
+          :type="'daterange'" v-model="queryForm[one.name]"></el-date-picker>
           
-           </div>
+          <el-date-picker v-if="['monthrange'].includes( one.data_type)" value-format="yyyy-MM" 
+          :type="'monthrange'" v-model="queryForm[one.name]"></el-date-picker>
+          
+          <el-date-picker v-if="['datetimerange'].includes( one.data_type)" :value-format="one.dateTimeFormat" :format="one.dateTimeFormat" 
+          :type="'datetimerange'" v-model="queryForm[one.name]"></el-date-picker>
+          </el-form-item>
+
+          
             <el-form-item>
-            <el-button type="primary"  class='form_query_button'  @click="submit">查询</el-button>
+            <el-button type="primary"  class='form_query_button'  @click="validate_submit">查询</el-button>
                    
             <el-dropdown style="margin: 2px;" v-if='Object.keys(result.data)!=0' @command="ExcelCommand($event, node,data)">
               <el-button type="primary" class='form_query_button' >
@@ -120,8 +148,7 @@
       </el-form>
     </div>
     <div ref="report_pane" :style="{    'flex-grow': 1,height:'90%',overflow: 'auto',color:result.defaultsetting['COLOR'],background:result.defaultsetting['BACKGROUND-COLOR']}">
-        <grid-layout-form v-if="layoutType=='gridLayout'" :layout="layout" :big_screen_scale="big_screen_scale" :big_screen_scale_x="big_screen_scale_x"
-         :big_screen_scale_y="big_screen_scale_y"
+        <grid-layout-form v-if="layoutType=='gridLayout'" :layout="layout" :scale="scale"
         >
         </grid-layout-form>          
         <widget-form v-else   :data="layout"   
@@ -139,6 +166,7 @@ import {convert_array_to_json,arrayToTree,seriesLoadScripts} from './utils/util.
 import {preview_one,get_pdf} from "./api/report_api"
 import {exceljs_inner_exec,xlsxjs_inner_exec} from './utils/export_excel.js'
 import paperSetting  from './paperSetting.vue'
+import { Loading } from 'element-ui';
 export default {
     name: 'preview',  
     props:["grpId"],
@@ -150,22 +178,7 @@ export default {
   inject: ["context"],
   provide() {
     return {
-      context: {
-          all_sheet_windows:[],
-          canDraggable:false,
-          report:this.context?.report,
-          report_result:this.result,
-          mode:"preview",
-          event:{},
-          queryForm:this.queryForm,
-          allElementSet:this.context.allElementSet,
-          clickedEle:this.clickedEle,
-          //不放到这里，会导致动态runtime-template重算，如果是有滚动行的，会每次都重新跑到顶部
-          in_exec_url:this.in_exec_url,
-          fresh_ele:this.fresh_ele,
-          defaultsetting:this.result.defaultsetting,
-          name_lable_map:this.name_lable_map
-      },      
+      context: this.create_context(),      fresh_ele:this.fresh_ele,
 
     }
   },  
@@ -174,12 +187,14 @@ export default {
         name_lable_map:{},
         paper_setting_dialogVisible:false,
         pdf_output_dialogVisible:false,
+        dync_item_dialogVisible:false,
+        dync_item:{},
         preview_dialogVisible:false,
         previewFormParam:{},
         queryForm:{},
         queryForm_show:{},
         exec_log:"",
-        result:{},
+        result:{dataSet:{},data:{}},
         mode:"preview",
         last_js_cript:"",
         clickedEle:{},
@@ -193,9 +208,7 @@ export default {
         pageSize:20,
         fresh_ele:[],
         in_exec_url:{stat:false},
-        big_screen_scale:70,
-        big_screen_scale_x:70,
-        big_screen_scale_y:70,
+        scale:{x:100,y:100,v:100},
     }
   },
   watch:{
@@ -204,12 +217,12 @@ export default {
       if(newVal==false){
         setTimeout(() => {
             _this.$nextTick(x=>{
-                let form_h=_this.$refs.form.clientHeight+4
+                let form_h=_this.$refs.div_form.clientHeight+4
                 _this.$refs.report_pane.style.height=`calc(100%)`// - ${form_h}px
                 if(_this.result.defaultsetting.big_screen=='1'){
-                  _this.big_screen_scale_y=100*_this.$refs.report_pane.clientHeight/parseInt(_this.result.defaultsetting.screen_height)
-                  _this.big_screen_scale_x=100*_this.$refs.report_pane.clientWidth/parseInt(_this.result.defaultsetting.screen_width)
-                  _this.big_screen_scale=Math.min(_this.big_screen_scale_x,_this.big_screen_scale_y)
+                  _this.scale.y=100*_this.$refs.report_pane.clientHeight/parseInt(_this.result.defaultsetting.screen_height)
+                  _this.scale.x=100*_this.$refs.report_pane.clientWidth/parseInt(_this.result.defaultsetting.screen_width)
+                  _this.scale.v=Math.min(_this.scale.x,_this.scale.y)
                 }
             })    
         });
@@ -247,19 +260,43 @@ export default {
       let datauri = URL.createObjectURL(pdf_data)
       document.getElementById("pdf_output").data =datauri
     },
-    submit(){
+    validate_submit(){
       let _this=this
-      _this.exec_log=""
-      _this.showLog=true
-      _this.executed = false
-      setTimeout(async function(){
-        await preview_one(_this,false)
-      })
-      
+      _this.$refs.form.validate((valid) => {
+          if (valid) {
+            _this.exec_log=""
+            _this.showLog=true
+            _this.executed = false
+            setTimeout(async function(){
+              await preview_one(_this,false)
+            })
+          } else {
+            _this.$message.error('必填项目没填内容!!');
+            return false;
+          }
+        });
+    },
+    submit(){
+      preview_one(this,false)
     },
     change_param(param_name){
       let _this=this
-      if(this.context.report_result.param_liandong.includes(param_name)){
+      function is_depend(name){
+        let cur_dep=_this.context.report_result.param_depend_dic[name]
+        if(cur_dep){
+          if(cur_dep.indexOf(param_name)>=0)  
+            return true
+          return Enumerable.from(cur_dep).any(x=> is_depend(x))
+        }
+      }
+      if(_this.context.report_result.param_liandong?.includes(param_name)){
+        for(let x in _this.queryForm){
+          if(is_depend(x)){
+            _this.queryForm[x]=''
+            _this.previewFormParam.dataSet[x]=[]
+          }
+        }
+        
         console.info(_this.queryForm)
         setTimeout(async function(){
           await preview_one(_this,true,param_name)
@@ -275,6 +312,26 @@ export default {
       let ret=arrayToTree(aa,{pid:para.parent_valueField_kyz,id:para.valueField_kyz})
       return ret
     },
+    create_context(){
+      return {
+          all_sheet_windows:[],
+          canDraggable:false,
+          report:this.context?.report,
+          report_result:this.result,
+          mode:"preview",
+          grpId:this.grpId,
+          event:{},
+          queryForm:this.queryForm,
+          rpt_this:this,
+          allElementSet:this.context.allElementSet,
+          clickedEle:this.clickedEle,
+          //不放到这里，会导致动态runtime-template重算，如果是有滚动行的，会每次都重新跑到顶部
+          in_exec_url:this.in_exec_url,
+          scale:this.scale,          
+          defaultsetting:this.result.defaultsetting,
+          name_lable_map:this.name_lable_map          
+      };
+    },
     tag_click(key,val){
       console.info(val.color); 
       this.show_type=key
@@ -283,11 +340,26 @@ export default {
       let _this=this
       if(command=="exceljs")
         seriesLoadScripts('cdn/exceljs/exceljs.min.js',null,function (){
-          exceljs_inner_exec(_this.result,_this.name_lable_map)
+          let loadingInstance = _this.$loading({ lock: true,
+          text: '正在导出',
+          spinner: 'el-icon-loading',
+          background: 'rgba(0, 0, 0, 0.7)' });
+          setTimeout(async () => { // 以服务的方式调用的 Loading 需要异步关闭
+            await exceljs_inner_exec(_this,_this.name_lable_map)
+            loadingInstance.close();
+          },100);
+          
         })
       else if(command=="xlsxjs")
           seriesLoadScripts('cdn/xlsx/dist/xlsx.full.min.js',null,function (){
-            xlsxjs_inner_exec(_this,_this.name_lable_map)
+            let loadingInstance = _this.$loading({ lock: true,
+          text: '正在导出',
+          spinner: 'el-icon-loading',
+          background: 'rgba(0, 0, 0, 0.7)' });
+            setTimeout(() => { // 以服务的方式调用的 Loading 需要异步关闭
+              xlsxjs_inner_exec(_this,_this.name_lable_map)
+              loadingInstance.close();
+            },100);
         })
     },
     export_excel(){

@@ -1,24 +1,59 @@
-import {getLuckyStyle,numToString } from "./util.js"
+import {getLuckyStyle,numToString,call_server_func,s2ab,saveAs } from "./util.js"
+
 const BitArray = require("./bits");
 let color_convert = require('onecolor');
 
-//如果使用 FileSaver.js 就不要同时使用以下函数
-function saveAs(obj, fileName) {//当然可以自定义简单的下载文件实现方式 
-    var tmpa = document.createElement("a");
-    tmpa.download = fileName || "下载";
-    tmpa.href = URL.createObjectURL(obj); //绑定a标签
-    tmpa.click(); //模拟点击实现下载
-    setTimeout(function () { //延时释放
-        URL.revokeObjectURL(obj); //用URL.revokeObjectURL()来释放这个object URL
-    }, 100);
-}
+  const getBase64Img_server = (key,_this) => {
+    return new Promise((resolve,reject) => {
+    //axios.request({
+    //  url:  key, headers: {
+    //    "Cross-Method":'CORS',
+    //  },
+    //  method: 'get',noloading:true,needResponse:true,responseType: 'arraybuffer' 
+    //})
+    call_server_func("download_img",key,_this)
+    .then((resp) => {
+      if(resp.errcode){
+        resolve( resp.message )  
+        return
+      }
+    const returnedB64 = `data:${resp.type};base64,${(resp.data)}`
+    resolve(returnedB64)
+    })
+    .catch((err) => 
+    {
+      reject({ error: 'Invalid signature image' })
+    }
+    )
+    })
+    }
+    const getBase64Img_client = (imgsrc) => {
+      return new Promise((resolve,reject) =>    {
+        const image =  document.createElementNS( 'http://www.w3.org/1999/xhtml', 'img' );;
+      // 解决跨域 Canvas 污染问题      
+      image.crossOrigin= '*';
+      image.crossOrigin= 'anonymous';
+      image.src = imgsrc;
+      image.onload = function () {
+          const canvas = document.createElement('canvas');
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const context = canvas.getContext('2d');
+          context.drawImage(image, 0, 0, image.width, image.height);
+          const url = canvas.toDataURL('image/png');
+          resolve(url)
+      };
+      
+  })
+  }
+
 
 function find_style(tbl,rowNo,colNo,cur_tbl_class_dict){        
     for(let idx=0;idx<tbl.abs_to_design.length;idx++){
         let one=tbl.abs_to_design[idx]
         let cur_ret={}
         if(one.row[0]<=rowNo && rowNo<=one.row[1] && one.col[0]<=colNo && colNo<=one.col[1]){
-            Object.assign(cur_ret,default_css,cur_tbl_class_dict[tbl.loc_style[one.cell+"_S"] ??""],cur_tbl_class_dict[tbl.loc_style[one.cell+"_D"] ??""]
+            Object.assign(cur_ret,default_css,cur_tbl_class_dict[tbl.loc_style[one.cell+"_S"] ??""],cur_tbl_class_dict[tbl.loc_style[`${rowNo}_${colNo}_D`] ??""]
             )
             return cur_ret
         }
@@ -28,7 +63,7 @@ function find_style(tbl,rowNo,colNo,cur_tbl_class_dict){
   let default_css
   function parse_elelment(x_ele){
     let ccc,i_idx
-    let ret={'font':{},'alignment':{},'border':{},'fill':{}};
+    let ret={'font':{},'alignment':{wrapText: true},'border':{},'fill':{}};
     x_ele.split(";").forEach(element => {
         if(element=="")
           return
@@ -37,18 +72,18 @@ function find_style(tbl,rowNo,colNo,cur_tbl_class_dict){
           case "background-color":
             i_idx=one_pair[1].indexOf("!")
             if(i_idx>0)
-              ccc=color_convert(one_pair[1].substring(0,i_idx))
+              ccc=color_convert(one_pair[1].substring(0,i_idx).trim())
             else
-            ccc=color_convert(one_pair[1])
+            ccc=color_convert(one_pair[1].trim())
             if(ccc)
               ret['fill']['fgColor']={argb:ccc.hex().substring(1)}
             break
           case "color":
             i_idx=one_pair[1].indexOf("!")
             if(i_idx>0)
-              ccc=color_convert(one_pair[1].substring(0,i_idx))
+              ccc=color_convert(one_pair[1].substring(0,i_idx).trim())
             else
-            ccc=color_convert(one_pair[1])
+            ccc=color_convert(one_pair[1].trim())
             if(ccc)
               ret['font']['color']={argb:ccc.hex().substring(1)}
             break
@@ -135,15 +170,19 @@ function find_config_merge(result_tbl,rowNo,colNo){
   }
 }  
 const http_src_pattern=/<img [^>]*src=['"]([^'"]+)[^>]*>/gi  
-export  async function exceljs_inner_exec(_this_result,name_lable_map){
+export  async function exceljs_inner_exec(_this,name_lable_map){
+    let _this_result=_this.result
     const wb = new ExcelJS.Workbook();
-    let ws ,title,one_obj
+    let ws ,title,one_obj,file_name=_this.result._zb_var_.file_name
     let allSheetNames=new Set()
-    Object.keys( name_lable_map).forEach(one => {
+    //Object.keys( name_lable_map).forEach(one => {
+    for(let one of Object.keys( name_lable_map) ){
         one_obj=name_lable_map[one]
         if(one_obj.component=="luckySheetProxy"){
           title=one_obj.label??one
           let cur_table=_this_result.data[one]
+          if(cur_table.title && cur_table.title!="")
+            file_name=file_name??cur_table.title??"这里是下载的文件名"
           let cur_tbl_class_dict=parse_class(cur_table)
           if (cur_table.type== "common"){
             //if(cur_table.optimize==true &&
@@ -167,19 +206,23 @@ export  async function exceljs_inner_exec(_this_result,name_lable_map){
                 tableBitFlag[i]=new BitArray()
             let line_no=0
             let column_nums=Object.keys( cur_table.columnlenArr).length
-            cur_table.tableData.forEach(one_line=>{   
-              
+            //cur_table.tableData.forEach(one_line=>{   
+            for(let one_line of cur_table.tableData ){  
               ws.addRow(one_line.slice(0,column_nums))//添加数据到excel
               let col_no=0
               const row = ws.getRow(line_no+1)// 从1 开始计数，设置行高
               row.height= (cur_table.rowlenArr[line_no]??cur_table.rowlenArr["default"] )*72/96
-
-              one_line.forEach(one_cell => {
-                if(col_no>=column_nums)
-                  return   
+              for(let one_cell of one_line){ 
+                //console.info(one_cell)
+              //one_line.forEach(async (one_cell) => {
+                if(col_no>=column_nums){
+                  col_no++
+                  continue   
+                }
                 if(tableBitFlag[line_no].get(col_no))
                 {
-                    return;
+                  col_no++
+                  continue;
                 }
                 tableBitFlag[line_no].set(col_no ,1)
                 let r_c=find_config_merge(cur_table,line_no,col_no)//config_merge[`${rowNo}_${colNo}`]
@@ -192,33 +235,52 @@ export  async function exceljs_inner_exec(_this_result,name_lable_map){
                     }
                 }
                 let name=numToString(col_no+1)+(line_no+1)      //excel 单元格名字       
-                if(one_cell && one_cell.indexOf("<img")>=0){
+                if(one_cell?.indexOf && one_cell.indexOf("<img")>=0){
                   let imageId2=null
                   let script_result;
+                  let img_response
                   while ((script_result = http_src_pattern.exec(one_cell)) != null)  {
                       let match_result=script_result[1];
                       if(match_result && match_result.length>0){
-                        if(match_result.startsWith("http")){
-                          imageId2 = wb.addImage({
-                            filename: match_result,
-                            extension: 'png',
-                          });
-                        }else if(match_result.startsWith("data")){
+                        if(match_result.startsWith("data")){
                           imageId2 = wb.addImage({
                             base64filename: `img/${name}.png`,
                             base64: match_result,
                             extension: 'png'
                           });
                          
+                        }else 
+                        //if(match_result.startsWith("http"))
+                        {
+                          
+                          //let resp=await fetch(match_result,{mode: 'no-cors',redirect: 'follow',})
+                          //let bbb=await resp.blob()
+                          //const returnedB64 = `data:${resp.headers['content-type']};base64,${Buffer.from(bbb).toString('base64')}`
+                          if(_this.result.defaultsetting.excel_img_func=='server')
+                            img_response=await getBase64Img_server(match_result,_this)
+                          else
+                            img_response=await getBase64Img_client(match_result,_this)
+                          if(!img_response.startsWith("data"))
+                            ws.getCell(name).value=img_response
+                          else
+                            imageId2 = wb.addImage({
+                              base64: img_response, 
+                              extension: 'png',
+                            });
                         }
                       }
                   }
-                  ws.getCell(name).value=""
+                  
                   let m=cur_table.config_merge[`${line_no}_${col_no}`]
-                  if(m){
-                    ws.addImage(imageId2, numToString(m.c+1) + (m.r+1)+":"+ numToString(m.c+m.cs)+ (m.r+m.rs));
-                  }else{                  
-                    ws.addImage(imageId2, name+":"+name);
+                  if(imageId2!=null){
+                    ws.getCell(name).value=""
+                    if(m){
+                      ws.addImage(imageId2, numToString(m.c+1) + (m.r+1)+":"+ numToString(m.c+m.cs)+ (m.r+m.rs));
+                    }else{                  
+                      ws.addImage(imageId2, name+":"+name);
+                    }
+                  }else{
+                    
                   }
                   //ws.addBackgroundImage(imageId2);
                 }
@@ -236,9 +298,9 @@ export  async function exceljs_inner_exec(_this_result,name_lable_map){
                   }
                 })
                 col_no++
-              });
+              };
               line_no++
-            })                
+            }                
             Object.keys( cur_table.config_merge).forEach(ele_m=>{
               let m=cur_table.config_merge[ele_m]
               ws.mergeCells(numToString(m.c+1) + (m.r+1)+":"+ numToString(m.c+m.cs)+ (m.r+m.rs));
@@ -253,31 +315,19 @@ export  async function exceljs_inner_exec(_this_result,name_lable_map){
           }
         }
         if(ws==undefined)
-          return
+          continue
         //while(wb.SheetNames.includes(title))
         //  title=title+one_obj.gridName
         //XLSX.utils.book_append_sheet(wb, ws, title.replace(/[\\|/|?|*|\[|\]]/,'_'))
         //ws=undefined
-    });
+    };
     const buffer = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buffer], { type: "application/octet-stream"}), "这里是下载的文件名" + ".xlsx");
+    saveAs(new Blob([buffer], { type: "application/octet-stream"}), (file_name??"这里是下载的文件名" )+ ".xlsx");
   }
-  function s2ab(s) {
-    if (typeof ArrayBuffer !== 'undefined') {
-        var buf = new ArrayBuffer(s.length);
-        var view = new Uint8Array(buf);
-        for (var i = 0; i != s.length; ++i) view[i] = s.charCodeAt(i) & 0xFF;
-        return buf;
-    } else {
-        var buf = new Array(s.length);
-        for (var i = 0; i != s.length; ++i) buf[i] = s.charCodeAt(i) & 0xFF;
-        return buf;
-    }
-}
   export function xlsxjs_inner_exec(_this,name_lable_map){
       const wb = XLSX.utils.book_new()
       
-      let ws ,title,one_obj
+      let ws ,title,one_obj,file_name=_this.result._zb_var_.file_name
       Object.keys( name_lable_map).forEach(one => {
           one_obj=name_lable_map[one]
           if(one_obj.component=="ele-grid"){
@@ -303,6 +353,8 @@ export  async function exceljs_inner_exec(_this_result,name_lable_map){
           }
           else if(one_obj.component=="luckySheetProxy"){
             if (_this.result.data[one].type== "common"){
+              if(_this.result.data[one].title && _this.result.data[one].title!="")
+                file_name=file_name??_this.result.data[one].title??"这里是下载的文件名"
               ws= XLSX.utils.aoa_to_sheet(_this.result.data[one].tableData)
               ws['!merges']=[]
               Object.keys( _this.result.data[one].config_merge).forEach(ele_m=>{
@@ -327,7 +379,28 @@ export  async function exceljs_inner_exec(_this_result,name_lable_map){
           ws=undefined
       });
       const wopts = { bookType: 'xlsx', bookSST: true, type: 'binary' };//这里的数据是用来定义导出的格式类型 
-      saveAs(new Blob([s2ab(XLSX.write(wb, wopts))], { type: "application/octet-stream"}), 
-      "这里是下载的文件名" + ".xlsx");
+      saveAs(new Blob([s2ab(XLSX.write(wb, wopts))], { type: "application/octet-stream"}), (file_name??"这里是下载的文件名") + ".xlsx");
 
     }
+import   ResultGrid2HtmlTable2   from './resultGrid2HtmlTable.js'    
+export  async function docx_inner_exec(_this,name_lable_map){
+      let ws ,title,one_obj,htmlString
+      Object.keys( name_lable_map).forEach(one => {
+          one_obj=name_lable_map[one]
+          if(one_obj.component=="luckySheetProxy"){
+            if (_this.result.data[one].type== "common"){
+              let cur_grid=_this.result.data[one]
+              let TABLEOBJ=new ResultGrid2HtmlTable2(cur_grid,{clientWidth:10000000},{no_use_parent_css:true,fit:false,page_size:10000},_this.result.defaultsetting)
+              htmlString=TABLEOBJ.show(1,10000)
+            }
+          }          
+      });
+      const fileBuffer = await HTMLtoDOCX(htmlString, null, {
+        table: { row: { cantSplit: true } },
+        footer: true,
+        pageNumber: true,
+      });
+
+      saveAs(new Blob([s2ab(fileBuffer)], { type: "application/octet-stream"}), 
+      "这里是下载的文件名" + ".docx");      
+}

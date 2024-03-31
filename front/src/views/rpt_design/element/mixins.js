@@ -1,8 +1,9 @@
 import {request} from 'axios'
 import x2js from 'x2js' 
+import loading from "@/util/loading"
 import {baseUrl} from '../api/report_api'
-import {test_data} from "../utils/util" 
-export default {
+import {showDialog,find_item,test_data,findElelment} from "../utils/util" 
+let default_mixins={
     props: {
       depth:{
         type: Number,
@@ -86,8 +87,9 @@ export default {
                 return
               if(val.data && this.self.component=="luckySheetProxy"){
                 if(["run" ,"preview" ].includes( this.context.mode) && this.buildDisplayData && val.data[this.self.gridName]){
-                  if(!this.fresh_ele.includes("表格:"+this.self.gridName))
+                  if(!this.fresh_ele.includes("表格:"+this.self.gridName) && !(val.fresh_report||[]).includes("表格:"+this.self.gridName) )
                     return
+                    
                   this.buildDisplayData(true)
                   return
                 }
@@ -99,14 +101,21 @@ export default {
               if(!val.dataSet && !val.data)
                   return   
               let name_arr=this.self.datasource.split(":")
-              if((name_arr[0]=='数据集' && val.dataSet[name_arr[1]])              
-                || (name_arr[0].startsWith('表格') && val.data[name_arr[1]])
-              ){
-                if(this.refresh)
-                  this.refresh()
-                else
-                  this.buildDisplayData()
-                return
+              if((name_arr[0]=='数据集' && val.dataSet[name_arr[1]]) || (name_arr[0].startsWith('表格') && val.data[name_arr[1]]))
+              {
+                if(name_arr[0]=='数据集' && (val.fresh_dataset||[]).includes(this.self.datasource)){
+                  if(this.refresh)
+                    this.refresh()
+                  else if(this.buildDisplayData)
+                    this.buildDisplayData()
+                  return
+                }else if(name_arr[0].startsWith('表格') && (val.fresh_report||[]).includes(this.self.datasource) ){
+                  if(this.refresh)
+                    this.refresh()
+                  else if(this.buildDisplayData)
+                    this.buildDisplayData()
+                }
+
               }      
           },deep:true
       }, 
@@ -133,6 +142,15 @@ export default {
           ds=test_data
           return ds.slice(from,to)
       },
+      findElelment(name,prop_dict){
+        return findElelment(name,prop_dict,this)
+      },
+      async showDialog (ele_name, data) {
+        return showDialog(ele_name, data,this)
+      },
+      find_item(item){
+        return find_item(item,this)
+     },
       /**
        * 刷新机制：context.clickedEle 中存放每个元素的点击数据
        * 在点击grid或report或图等元素时，需要设置 clickedEle.然后调用click_fresh，参数为点击元素的选中数据p_data
@@ -143,19 +161,31 @@ export default {
        */
       
       click_fresh(p_data){
-        
+        let _this=this
         this.fresh_ele.splice(0) 
-        this.fresh_ele.push("元素选中行:"+this.self.gridName)//: Date.now() + '_' + Math.ceil(Math.random() * 99999});
-        if(this.self.fresh_ds.length==0) //没有需要刷新的对象，就返回
+        if(_this.context.mode=='design')
           return;
+        this.fresh_ele.push("元素选中行:"+this.self.gridName)//: Date.now() + '_' + Math.ceil(Math.random() * 99999});
+        if(this.self.fresh_ds==undefined || this.self.fresh_ds.length==0) //没有需要刷新的对象，就返回
+        {
+          if(_this.self.click){
+            let func
+            eval(`func=function (p_data,p_this){ 
+              ${_this.self.click}
+            }`)
+            func(p_data,this)
+          }
+          if(window.cellreport[`cr_click_${this.self.gridName}`]){
+            window.cellreport[`cr_click_${this.self.gridName}`](p_data,this)
+          }
+          return;
+        }
         if(this.context.in_exec_url.stat){
           this.$notify({title: '提示',message: "已经在执行一个查询！",type: 'error',duration:3000});
           return
         }
-        let x2jsone=new x2js(); //实例
-        let _this=this
-        let data=new FormData();
-        data.append("_content", x2jsone.js2xml({report:_this.context.report}) )
+        let x2jsone=new x2js(); //实例        
+        let data=new FormData();        
         data.append("_createFormParam", false )
         let all_gridname=Object.keys(_this.context.report_result.data)
         let real_fresh_ds=this.self.fresh_ds.filter(x=>x.split(":")[0]!='表格'  ||( x.split(":")[0]=='表格'  && all_gridname.includes( x.split(":")[1] )) )
@@ -166,10 +196,18 @@ export default {
             t_params.push({"name":ele.name,"value":p_data.data[ele.value]})
             data.append(ele.name,p_data.data[ele.value])
             return;
+          }else if(ele.value=="点击的列名"){
+            t_params.push({"name":ele.name,"value":p_data['cell']})
+            data.append(ele.name,p_data['cell'])
+            return;
+          }else if(ele.value=="点击的值"){
+            t_params.push({"name":ele.name,"value":p_data['column']})
+            data.append(ele.name,p_data['column'])
+            return;
           }
           // 使用缺省原始参数
           let default_param=Enumerable.from(_this.context.report_result.form).first(x=>x.name==ele.name)
-          t_params.push({"name":ele.name,"value":default_param.value})
+          t_params.push({"name":ele.name,"value":default_param.value.toString()})
           data.append(ele.name,default_param.value)  
         })        
         _this.context.in_exec_url.stat=true;
@@ -179,19 +217,30 @@ export default {
         {
           url=_this.context.in_exec_url.run_url
         }else{
+          data.append("_content", x2jsone.js2xml({report:_this.context.report}) )
           let grpid=_this.context.report.reportName.split(":")[0]
           url= `${baseUrl}/design/preview:${grpid}`
           data.append("_fresh_params", JSON.stringify(t_params))
         }
-        request({method: 'post',url,data,withCredentials: true
-        }).then(response => {
+        request({method: 'post',url,data,withCredentials: true,showLoading:window.cellreport.fresh_ele_loading}).then(response => {
           _this.context.in_exec_url.stat=false;
           if(response.errcode && response.errcode ==1){
             _this.$notify({title: '提示',message: response.message,duration: 0});
             return;
           }
+          if(_this.self.force_sync_param){
+            response.form.forEach(ele=>{
+              let val=ele.value
+              if(ele.data_type=='date' && val!="")
+                  val=new Date(ele.value).format("yyyy-MM-dd")
+              _this.$set(_this.context.queryForm,ele.name,val)
+            })
+            _this.context.report_result.form=response.form
+          }
           //console.info(response)
           _this.fresh_ele.splice(0)
+          _this.context.report_result.fresh_report=Enumerable.from( Object.keys(response.data??{})).select(x=>"表格:"+x).toArray()
+          _this.context.report_result.fresh_dataset=Enumerable.from( Object.keys(response.dataSet??{})).select(x=>"数据集:"+x).toArray()
           if(_this.context.report_result.dataSet==undefined)
             _this.context.report_result.dataSet={}
           if(!_this.validatenull(response.dataSet)){
@@ -210,7 +259,17 @@ export default {
               _this.fresh_ele.push("表格:"+name);
             });
           }
-          if(!window.cr_close_fresh_message)
+          if(_this.self.click){
+            let func
+            eval(`func=function (p_data,p_this){ 
+              ${_this.self.click}
+            }`)
+            func(p_data,this)
+          }
+          if(window.cellreport[`cr_click_${_this.self.gridName}`]){
+            window.cellreport[`cr_click_${_this.self.gridName}`](p_data,_this,response)
+          }
+          if(!window.cellreport.cr_close_fresh_message)
             _this.$notify({title: '提示',type: 'success',message: _this.fresh_ele,position: 'bottom-right',duration: 3000});
         }).catch(error=> { 
           _this.context.in_exec_url.stat=false;
@@ -234,3 +293,4 @@ export default {
     },
     
 }
+export default default_mixins;

@@ -85,7 +85,7 @@ export const parseParam=function(one_ds__text){
             let param_result=one_stat.match(/param\.[^ \t\v\n\r\f\+\*-\/\(\)\{\}\.\"\']*/img)
             if(param_result){
                 param_result.forEach(ele=>{
-                    let new_name=ele.substring(6)
+                    let new_name=ele.substring(6).replace("$","")
                     if(params.find(x=>x==new_name)==null){
                         params.push(new_name)
                     }
@@ -93,7 +93,7 @@ export const parseParam=function(one_ds__text){
             }
         })
     }
-    return params
+    return Enumerable.from(params).where(x=>x!="" && x!=null).toArray()
 }
 export const build_layout=function(AllGrids){
     let layout_item_arr =[]
@@ -191,7 +191,10 @@ export const build_chart_data=function (ds_name_source,report_result,clickedEle_
     ds_name=ds_name.length>1?ds_name[1]:ds_name[0]
     let real_data
     if(ds_name_source.startsWith("数据集")){
-        real_data= JSON.parse(JSON.stringify(report_result.dataSet[ds_name][0]))
+        if(report_result.dataSet[ds_name])
+            real_data= JSON.parse(JSON.stringify(report_result.dataSet[ds_name][0]))
+        else 
+            return [[],[],[]];
     } 
     else if(ds_name_source.startsWith("元素")){
         let cur_grid=report_result.data[ds_name]
@@ -225,6 +228,16 @@ export const build_chart_data=function (ds_name_source,report_result,clickedEle_
             //}
         }
         else if(ds_name_source.startsWith('表格汇总数据')){
+            for (let index = cur_grid.colName_lines[1]+1; index < cur_grid.tableData.length; index++) 
+            {
+                if(index<cur_grid.extend_lines[0] || index > cur_grid.extend_lines[1] ){
+                //if(cur_grid.tableData[index].find(x=>x==null)).length>2) //todo
+                real_data.push(cur_grid.tableData[index])
+                }
+            }
+        } 
+        else if(ds_name_source.startsWith('表格明细及汇总数据')){
+            real_data=real_data.concat(cur_grid.tableData.slice(cur_grid.extend_lines[0],cur_grid.extend_lines[1]+1) )            
             for (let index = cur_grid.colName_lines[1]+1; index < cur_grid.tableData.length; index++) 
             {
                 if(index<cur_grid.extend_lines[0] || index > cur_grid.extend_lines[1] ){
@@ -313,7 +326,7 @@ export const convert_array_to_json=function (data,start=0,end=-1,col_list){
     }
     data.slice(start,end).forEach(element => {
         let one_line={}
-        if(element.length==0)
+        if(element==undefined || element.length==0)
             return false;
         gridData.push(one_line)
         for (let index = 0; index < col_list.length; index++) {
@@ -382,11 +395,11 @@ export const getObjType = obj => {
   };
 
   
-function loadFile (name) { // name为文件所在位置
+export function loadFile (name) { // name为文件所在位置
     let xhr = new XMLHttpRequest(),
         okStatus = document.location.protocol === "file:" ? 0 : 200;
     xhr.open('GET', name, false);
-    xhr.overrideMimeType("text/xml;charset=utf-8");//默认为utf-8
+    xhr.overrideMimeType("text/plain;charset=utf-8");//默认为utf-8
     xhr.send(null);
     return xhr.status === okStatus ? xhr.responseText : null;
 }
@@ -544,7 +557,7 @@ function getHtmlBorderStyle(type, _color){
     return style + _color;
 }
 
-function luckySheet2ReportGrid(sheet_window,DefaultCssSetting){
+export function luckySheet2ReportGrid(sheet_window,DefaultCssSetting){
     let sheet=sheet_window.luckysheet.getSheet(0)
     let gridName=sheet_window.gridName
     let boderinfo=sheet_window.luckysheet.getBorderInfoCompute(0)
@@ -582,7 +595,7 @@ function luckySheet2ReportGrid(sheet_window,DefaultCssSetting){
                 if(cell.cr['_FONT-SIZE']==DefaultCssSetting["FONT-SIZE"]) delete cell.cr['_FONT-SIZE']
                 if(cell.cr['_background-color']==DefaultCssSetting["BACKGROUND-COLOR"]) delete cell.cr['_background-color']
                 if(cell.cr['_color']==DefaultCssSetting["COLOR"]) delete cell.cr['_color']
-
+                if(cell.cr['_displayValueExpr']=="=@value") delete cell.cr['_displayValueExpr']
                 //if(cell.cr['_BORDER-LEFT']==DefaultCssSetting.border_style) delete cell.cr['_BORDER-LEFT']
                 //if(cell.cr['_BORDER-RIGHT']==DefaultCssSetting.border_style) delete cell.cr['_BORDER-RIGHT']
                 //if(cell.cr['_BORDER-TOP']==DefaultCssSetting.border_style) delete cell.cr['_BORDER-TOP']
@@ -590,7 +603,13 @@ function luckySheet2ReportGrid(sheet_window,DefaultCssSetting){
 
                 if(cell.cr._absName)
                     delete cell.cr._absName
-                cells.push(JSON.parse(JSON.stringify(cell.cr)))
+                let t_cell=JSON.parse(JSON.stringify(cell.cr))
+                Object.keys(t_cell).forEach(x=>{
+                    if(x!='_valueExpr' && t_cell[x]=='')
+                        delete t_cell[x]
+                })
+                cells.push(t_cell)
+                //cells.push(JSON.parse(JSON.stringify(cell.cr)))
             }
         })
     })
@@ -598,17 +617,27 @@ function luckySheet2ReportGrid(sheet_window,DefaultCssSetting){
     let row_num=Math.min(max_r+4, sheet.visibledatarow.length)
     let col_num=Math.min(max_c+4,sheet.visibledatacolumn.length)
     for(let i=0;i<row_num;i++){
-        rows[i]={_name:i +1,_height:
+        rows[i]={...sheet.cr_rows[i],... {_name:i +1,_height:
             (sheet.config && sheet.config.rowlen && sheet.config && sheet.config.rowlen[i.toString()]!=undefined)?
             sheet.config.rowlen[i.toString()]:sheet.defaultRowHeight,
-            _fixed:"False" }
+            _fixed:"False" }}
+        Object.keys(rows[i]).forEach(x=>{
+            if(rows[i][x]=='')
+                delete rows[i][x]
+        })
+        delete rows[i]._fixed
     }
     let columns=[]
     for(let i=0;i<col_num;i++){
-        columns[i]={_name:numToString(parseInt(i)+1).toLowerCase() ,_width:
+        columns[i]={...sheet.cr_columns[i],...{_name:numToString(parseInt(i)+1).toLowerCase() ,_width:
             (sheet.config && sheet.config.columnlen && sheet.config && sheet.config.columnlen[i.toString()]!=undefined)?     
             sheet.config.columnlen[i.toString()] :sheet.defaultColWidth
-             ,_fixed:"False" }
+             ,_fixed:"False" }}
+        Object.keys(columns[i]).forEach(x=>{
+        if(columns[i][x]=='')
+            delete columns[i][x]
+        })
+        delete columns[i]._fixed
     }
     let fix_rows=sheet.freezen?.horizontal?.freezenhorizontaldata[1]
     let fix_cols=sheet.freezen?.vertical?.freezenverticaldata[1]
@@ -627,14 +656,15 @@ function luckySheet2ReportGrid(sheet_window,DefaultCssSetting){
     return aaa      
 }
 
-function designGrid2LuckySheet(grid,setting,DefaultCssSetting){
+export function designGrid2LuckySheet(grid,setting,DefaultCssSetting){
     let color = require('onecolor');
     let celldata=[]
     let merge={}
     let borderInfo=[]
     let rowlen={}
     let frozen_row_focus=-1, frozen_column_focus=-1
-    
+    if(grid.rows==undefined)    grid.rows={row:Enumerable.range(1,10).select(x=> {return {_name:x,_height:25,_fixed:"True"}}).toArray()}
+    if(grid.columns==undefined)    grid.columns={column:Enumerable.range(0,10).select(x=> {return {_name:'abcdefghijklmn'[x],_width:75,_fixed:"False"}}).toArray()}
     if(grid.rows && grid.rows.row)
     grid.rows.row.forEach(one => {
         rowlen[(parseInt(one._name)-1).toString()]=parseInt(one._height)
@@ -736,6 +766,7 @@ function designGrid2LuckySheet(grid,setting,DefaultCssSetting){
             push_border('_BORDER-BOTTOM')
         }
     });
+    
     return {
         "name": grid._name, //工作表名称
         "color": "", //工作表颜色
@@ -746,7 +777,7 @@ function designGrid2LuckySheet(grid,setting,DefaultCssSetting){
         "row": (grid.rows && grid.rows.row) ? grid.rows.row.length:10, //行数
         "column": (grid.columns && grid.columns.column) ? grid.columns.column.length:10, //列数
         "defaultRowHeight": 25, //自定义行高
-        "defaultColWidth": 73, //自定义列宽
+        "defaultColWidth": 75, //自定义列宽
         "celldata": celldata, //初始化使用的单元格数据
         "config": {
             "merge":merge, //合并单元格
@@ -758,6 +789,8 @@ function designGrid2LuckySheet(grid,setting,DefaultCssSetting){
             "authority":{}, //工作表保护
             
         },
+        "cr_rows":grid.rows.row,
+        "cr_columns":grid.columns.column,
         enableAddBackTop:false,enableAddRow:false,
 		sheetFormulaBar:false,
         "scrollLeft": 0, //左右滚动条位置
@@ -772,7 +805,7 @@ function designGrid2LuckySheet(grid,setting,DefaultCssSetting){
         "showGridLines": true, //是否显示网格线
     }
 }
-function resultGrid2LuckySheet(grid_name, param_grid){
+export function resultGrid2LuckySheet(grid_name, param_grid){
     let {config_merge,rowlenArr,columnlenArr,config_borderInfo,config_celldata,conditionformat,alternateformat}={...param_grid}
     let _alternateformat;
     eval("_alternateformat=["+alternateformat+"]")
@@ -1072,6 +1105,26 @@ const load_script_list=[]
  * @return {Array} 所有生成的脚本元素对象数组
  */
  export function seriesLoadScripts(scripts, options, callback) {
+    function clear_define(){
+        if(!old_define && window.define){
+            old_define={_amdLoaderGlobal:window._amdLoaderGlobal,_commonjsGlobal:window._commonjsGlobal,AMDLoader:window.AMDLoader,define:window.define,require:window.require} 
+            window._amdLoaderGlobal=undefined
+            window._commonjsGlobal=undefined
+            window.AMDLoader=undefined
+            window.define=undefined
+            window.require=undefined
+        }
+    }
+    function restore_define(){
+        if(old_define && old_define.define){
+            window._amdLoaderGlobal=old_define._amdLoaderGlobal
+            window._commonjsGlobal=old_define._commonjsGlobal
+            window.AMDLoader=old_define.AMDLoader
+            window.define=old_define.define
+            window.require=old_define.require
+          }
+    }
+    let old_define
     if (typeof (scripts) !== 'object') {
         var scripts = [scripts];
     }
@@ -1084,13 +1137,20 @@ const load_script_list=[]
             if (i !== last) {
                 recursiveLoad(i + 1);
             } else if (typeof (callback) === 'function') {
+                clear_define()
                 callback()
             };
+            restore_define()
             return;
         }
         
         s[i] = document.createElement('script');
         s[i].setAttribute('type', 'text/javascript');
+        s[i].onerror = function(e) {
+            // 远程文件载入失败的处理逻辑
+            alert('远程文件动态载入失败：'+scripts[i]);
+          };
+          
         // Attach handlers for all browsers
         // 异步
         s[i].onload = s[i].onreadystatechange = function () {
@@ -1101,8 +1161,10 @@ const load_script_list=[]
                 if (i !== last) {
                     recursiveLoad(i + 1);
                 } else if (typeof (callback) === 'function') {
+                    clear_define()
                     callback()
                 };
+                restore_define()
             }
         }
         // 同步
@@ -1114,9 +1176,9 @@ const load_script_list=[]
                 s[i].setAttribute(attr, options[attr]);
             }
         }
-
         HEAD.appendChild(s[i]);
     };
+    clear_define()
     recursiveLoad(0);
 }
 export function load_css_file(url){
@@ -1153,10 +1215,10 @@ export function js_getDPI() {
     return arrDPI;
 }
 
-function watermark(settings) {
+export function watermark(settings) {
     
     //默认设置
-    let defaultSettings = {
+    let dft = {
         watermark_txt: "text",
         watermark_x: 20, //水印起始位置x轴坐标
         watermark_y: 20, //水印起始位置Y轴坐标
@@ -1175,8 +1237,8 @@ function watermark(settings) {
     if (arguments.length === 1 && typeof arguments[0] === "object") {
         let src = arguments[0] || {};
         for (let key in src) {
-            if (src[key] && defaultSettings[key] && src[key] === defaultSettings[key]) continue;
-            else if (src[key]) defaultSettings[key] = src[key];
+            if (src[key] && dft[key] && src[key] === dft[key]) continue;
+            else if (src[key]) dft[key] = src[key];
         }
     }
     let oTemp = document.createDocumentFragment();
@@ -1188,31 +1250,31 @@ function watermark(settings) {
     let page_height = Math.max(document.body.scrollHeight, document.body.clientHeight) - 50;
     //page_height = Math.max(page_height, window.innerHeight - 30);
     //如果将水印列数设置为0，或水印列数设置过大，超过页面最大宽度，则重新计算水印列数和水印x轴间隔
-    if (defaultSettings.watermark_cols == 0 || (parseInt(defaultSettings.watermark_x + defaultSettings.watermark_width * defaultSettings.watermark_cols + defaultSettings.watermark_x_space * (defaultSettings.watermark_cols - 1)) > page_width)) {
-        defaultSettings.watermark_cols = parseInt((page_width - defaultSettings.watermark_x + defaultSettings.watermark_x_space) / (defaultSettings.watermark_width + defaultSettings.watermark_x_space));
-        defaultSettings.watermark_x_space = parseInt((page_width - defaultSettings.watermark_x - defaultSettings.watermark_width * defaultSettings.watermark_cols) / (defaultSettings.watermark_cols - 1));
+    if (dft.watermark_cols == 0 || (parseInt(dft.watermark_x + dft.watermark_width * dft.watermark_cols + dft.watermark_x_space * (dft.watermark_cols - 1)) > page_width)) {
+        dft.watermark_cols = parseInt((page_width - dft.watermark_x + dft.watermark_x_space) / (dft.watermark_width + dft.watermark_x_space));
+        dft.watermark_x_space = parseInt((page_width - dft.watermark_x - dft.watermark_width * dft.watermark_cols) / (dft.watermark_cols - 1));
     }
     //如果将水印行数设置为0，或水印行数设置过大，超过页面最大长度，则重新计算水印行数和水印y轴间隔
-    if (defaultSettings.watermark_rows == 0 || (parseInt(defaultSettings.watermark_y + defaultSettings.watermark_height * defaultSettings.watermark_rows + defaultSettings.watermark_y_space * (defaultSettings.watermark_rows - 1)) > page_height)) {
-        defaultSettings.watermark_rows = parseInt((defaultSettings.watermark_y_space + page_height - defaultSettings.watermark_y) / (defaultSettings.watermark_height + defaultSettings.watermark_y_space));
-        defaultSettings.watermark_y_space = parseInt(((page_height - defaultSettings.watermark_y) - defaultSettings.watermark_height * defaultSettings.watermark_rows) / (defaultSettings.watermark_rows - 1));
+    if (dft.watermark_rows == 0 || (parseInt(dft.watermark_y + dft.watermark_height * dft.watermark_rows + dft.watermark_y_space * (dft.watermark_rows - 1)) > page_height)) {
+        dft.watermark_rows = parseInt((dft.watermark_y_space + page_height - dft.watermark_y) / (dft.watermark_height + dft.watermark_y_space));
+        dft.watermark_y_space = parseInt(((page_height - dft.watermark_y) - dft.watermark_height * dft.watermark_rows) / (dft.watermark_rows - 1));
     }
     let x;
     let y;
-    for (let i = 0; i < defaultSettings.watermark_rows; i++) {
-        y = defaultSettings.watermark_y + (defaultSettings.watermark_y_space + defaultSettings.watermark_height) * i;
-        for (let j = 0; j < defaultSettings.watermark_cols; j++) {
-            x = defaultSettings.watermark_x + (defaultSettings.watermark_width + defaultSettings.watermark_x_space) * j;
+    for (let i = 0; i < dft.watermark_rows; i++) {
+        y = dft.watermark_y + (dft.watermark_y_space + dft.watermark_height) * i;
+        for (let j = 0; j < dft.watermark_cols; j++) {
+            x = dft.watermark_x + (dft.watermark_width + dft.watermark_x_space) * j;
             let mask_div = document.createElement('div');
             mask_div.id = 'mask_div' + i + j;
             mask_div.className = 'mask_div';
-            mask_div.appendChild(document.createTextNode(defaultSettings.watermark_txt));
+            mask_div.appendChild(document.createTextNode(dft.watermark_txt));
             //设置水印div倾斜显示
-            mask_div.style.webkitTransform = "rotate(-" + defaultSettings.watermark_angle + "deg)";
-            mask_div.style.MozTransform = "rotate(-" + defaultSettings.watermark_angle + "deg)";
-            mask_div.style.msTransform = "rotate(-" + defaultSettings.watermark_angle + "deg)";
-            mask_div.style.OTransform = "rotate(-" + defaultSettings.watermark_angle + "deg)";
-            mask_div.style.transform = "rotate(-" + defaultSettings.watermark_angle + "deg)";
+            mask_div.style.webkitTransform = "rotate(-" + dft.watermark_angle + "deg)";
+            mask_div.style.MozTransform = "rotate(-" + dft.watermark_angle + "deg)";
+            mask_div.style.msTransform = "rotate(-" + dft.watermark_angle + "deg)";
+            mask_div.style.OTransform = "rotate(-" + dft.watermark_angle + "deg)";
+            mask_div.style.transform = "rotate(-" + dft.watermark_angle + "deg)";
             mask_div.style.visibility = "";
             mask_div.style.position = "absolute";
             mask_div.style.left = x + 'px';
@@ -1221,13 +1283,13 @@ function watermark(settings) {
             mask_div.style.zIndex = "9999";
             //让水印不遮挡页面的点击事件
             mask_div.style.pointerEvents = 'none';
-            mask_div.style.opacity = defaultSettings.watermark_alpha;
-            mask_div.style.fontSize = defaultSettings.watermark_fontsize;
-            mask_div.style.fontFamily = defaultSettings.watermark_font;
-            mask_div.style.color = defaultSettings.watermark_color;
+            mask_div.style.opacity = dft.watermark_alpha;
+            mask_div.style.fontSize = dft.watermark_fontsize;
+            mask_div.style.fontFamily = dft.watermark_font;
+            mask_div.style.color = dft.watermark_color;
             mask_div.style.textAlign = "center";
-            mask_div.style.width = defaultSettings.watermark_width + 'px';
-            mask_div.style.height = defaultSettings.watermark_height + 'px';
+            mask_div.style.width = dft.watermark_width + 'px';
+            mask_div.style.height = dft.watermark_height + 'px';
             mask_div.style.display = "block";
             oTemp.appendChild(mask_div);
         };
@@ -1285,7 +1347,217 @@ export function randomRgbColor() { //随机生成RGB颜色
     const b = Math.floor(Math.random() * 256); //随机生成256以内b值
     return `rgb(${r},${g},${b})`; //返回rgb(r,g,b)格式颜色
   }
-export {
-    designGrid2LuckySheet,luckySheet2ReportGrid,resultGrid2LuckySheet,
-    loadFile,watermark
+import {request} from 'axios'
+import x2js from 'x2js' 
+function getUrl(_this,data){
+    if(typeof(_this)=="string")
+        return _this
+    else if(["preview","design",'conf'].includes( _this.mode) || ["preview","design",'conf'].includes( _this.context?.mode)){
+        const x2jsone=new x2js(); //实例
+        data.append("_content", x2jsone.js2xml({report:_this.context.report}) )
+        data.append("reportName", _this.context.report.reportName)
+        let grpId=_this.context.report.reportName.split(":")[0]
+        return `${baseUrl}/design/preview${grpId==0?"":":"+grpId}`
+    }
+    else  if(_this.mode=="run"| _this.context?.mode=="run"){
+        if(window.location.pathname.endsWith("run.html")){
+            if(window.location.hash!='')
+                return `${baseUrl}/run:${window.location.hash.substring(1)}`
+            else
+                return `${baseUrl}/run:default${window.location.search}`
+        }
+        else// if(window.location.pathname.endsWith("run"))
+            return window.location.href
+    }
+}
+export function call_server_func(func_name,func_params,_this,get_post='post') {
+    let data=new FormData();
+    data.append("__call_func",JSON.stringify({func_name,func_params}))    
+    let run_url=getUrl(_this,data)
+    if(run_url)
+        return request({method: 'post',data,url: run_url,withCredentials: true
+    })
+    else{
+        return new Promise((resolve,reject) => {
+            reject(`call_server_func 远程调用【${func_name}】，没有定义url`);
+        })
+    }    
+}
+window.cellreport.call_server_func=call_server_func
+
+export function getBase64(file){  //把图片转成base64编码
+    return new Promise(function(resolve,reject){
+        let reader=new FileReader();
+        let imgResult="";
+        reader.readAsDataURL(file);
+        reader.onload=function(){
+            imgResult=reader.result;
+        };
+        reader.onerror=function(error){
+            reject(error);
+        };
+        reader.onloadend=function(){
+            resolve(imgResult);
+        }
+    })
+}
+export function s2ab(s) {
+    if (typeof ArrayBuffer !== 'undefined') {
+        var buf = new ArrayBuffer(s.length);
+        var view = new Uint8Array(buf);
+        for (var i = 0; i != s.length; ++i) view[i] = s.charCodeAt(i) & 0xFF;
+        return buf;
+    } else {
+        var buf = new Array(s.length);
+        for (var i = 0; i != s.length; ++i) buf[i] = s.charCodeAt(i) & 0xFF;
+        return buf;
+    }
+}
+//如果使用 FileSaver.js 就不要同时使用以下函数
+export function saveAs(obj, fileName) {//当然可以自定义简单的下载文件实现方式 
+    var tmpa = document.createElement("a");
+    tmpa.download = fileName || "下载";
+    tmpa.href = URL.createObjectURL(obj); //绑定a标签
+    tmpa.click(); //模拟点击实现下载
+    setTimeout(function () { //延时释放
+        URL.revokeObjectURL(obj); //用URL.revokeObjectURL()来释放这个object URL
+    }, 100);
+}
+//设置cookie
+export function setCookie(cname, cvalue, exdays) {
+    var d = new Date();
+    d.setTime(d.getTime() + (exdays*24*60*60*1000));
+    var expires = "expires="+d.toUTCString();
+    document.cookie = cname + "=" + cvalue + "; " + expires;
+}
+//获取cookie
+export function  getCookie(cname) {
+    var name = cname + "=";
+    var ca = document.cookie.split(';');
+    for(var i=0; i<ca.length; i++) {
+        var c = ca[i];
+        while (c.charAt(0)==' ') c = c.substring(1);
+        if (c.indexOf(name) != -1) return c.substring(name.length, c.length);
+    }
+    return null;
+}
+//清除cookie  
+export function  clearCookie(name) {  
+    setCookie(name, "", -1);  
+}  
+function checkCookie() {
+    var user = getCookie("username");
+    if (user != "") {
+        alert("Welcome again " + user);
+    } else {
+        user = prompt("Please enter your name:", "");
+        if (user != "" && user != null) {
+            setCookie("username", user, 365);
+        }
+    }
+}  
+export async function  showDialog2 (ele_str, dync_item,_this) {
+    let context=_this.context||_this.create_context()
+    let Cpn = { template:`
+<el-dialog v-draggable v-if="visible" style="text-align: left;" 
+    :visible.sync="visible" 
+    :close-on-click-modal="false" direction="btt" append-to-body 
+    v-bind="{...{'custom-class':'dync_dialog',title:'信息'},...(dync_item.dialog_params||{}) }"
+> 
+<div v-bind="{...{style:'height:50vh'},...(dync_item.params||{})}">
+    ${ele_str}
+</div>
+${dync_item?.slot?.footer??''}
+</el-dialog> 
+    `,
+        data(){
+            return {
+                visible: true,
+                dync_item:dync_item,
+            }
+        },
+        methods:{...(dync_item?.methods??{} )}
+    };
+    return new Promise(function (resolve, reject) {
+      // 初始化配置参数
+      let opt = {
+        
+      }
+      let component = Object.assign({}, Cpn)
+      component.parent=_this
+      // 创建构造器创建实例挂载
+      let DialogC = Vue.extend(component)
+      let dialog = new DialogC()
+      // 关闭事件
+      let _onClose = dialog.$options.methods.onClose
+      dialog.onClose = function () {
+        resolve()
+        dialog.$destroy()
+        _onClose && _onClose.call(dialog)
+        document.body.removeChild(dialog.$el)
+      }
+      // 回调事件
+      let _onCallback = dialog.$options.methods.onCallback
+      dialog.onCallback = function (...arg) {
+        try {
+          _onCallback && _onCallback()
+          resolve(arg)
+          dialog.$destroy()
+          _onClose && _onClose.call(dialog)
+          document.body.removeChild(dialog.$el)
+        } catch (e) {
+          console.log(e)
+        }
+      }
+      
+      dialog.$mount()
+      // 点击关闭按钮时会改变visible
+      dialog.$watch('visible', function (n, o) {
+            dialog?.onClose()
+      })
+      document.body.appendChild(dialog.$el)
+    })
+}
+export async function  showDialog (ele_name, data,_this) {
+    let dync_item=findElelment(ele_name,data,_this)
+    return showDialog2(`<widget-form-item  :self="dync_item"  >  </widget-form-item>`,dync_item,_this);
+}
+
+  export function findElelment(name,prop_dict,_this){
+    let context=_this.context||_this.create_context()
+    if(context.report_result){
+      let ret=context.report_result.layout?.concat(
+        context.report_result.layout_hidden||[]).filter(x=>x.element.gridName==name)
+      if(ret!=null)
+        return Object.assign({}, ret[0].element,prop_dict||{})
+    }
+  }
+  export function find_item(item,_this){
+    let context=_this.context||_this.create_context()
+    if(context.mode!='design' || _this.selectWidget.type=='layout')
+        return false;
+    if(_this.selectWidget.type=='layout_item' && item.i==_this.selectWidget.item_i)
+    {
+        return true;
+    }
+    if(item==_this.selectWidget || item.element==_this.selectWidget)
+    {
+        return true;
+    }
+    let children=item.element?.children?.column || item.children?.column
+    if(children)
+    {
+        for(let one in children){
+            let in_child=_this.find_item(children[one])
+            if(in_child)
+            {
+                return true;
+            }
+        }
+    }        
+    return false;
+}
+export function isMobile(){
+    let flag = navigator.userAgent.match(/(phone|pad|pod|iPhone|iPod|ios|iPad|Android|Mobile|BlackBerry|IEMobile|MQQBrowser|JUC|Fennec|wOSBrowser|BrowserNG|WebOS|Symbian|Windows Phone)/i)
+    return flag!=null && flag.length>0;
 }

@@ -36,10 +36,15 @@ using reportWeb.Model;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using System.Net;
 using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.EntityFrameworkCore;
+
 //using PolarDB.PolarDBClient;
 using Serilog;
 using Microsoft.Extensions.FileProviders;
+using Dapper;
+using SqlKata;
+using SqlKata.Execution;
+using SqlKata.Compilers;
+using System.Timers;
 
 namespace reportWeb
 {
@@ -48,8 +53,28 @@ namespace reportWeb
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
+            
         }
+        private static void Timer_Elapsed(object sender, ElapsedEventArgs e, string directoryPath)
+        {
+            string[] files = Directory.GetFiles(directoryPath);
 
+            // 遍历文件并输出创建时间
+            foreach (string file in files)
+            {
+                FileInfo fileInfo = new FileInfo(file);
+                if(DateTime.Now - fileInfo.CreationTime > TimeSpan.FromMinutes(1))
+                {
+                    try
+                    {
+                        fileInfo.Delete();
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+        }
         public IConfiguration Configuration { get; }
         
         // This method gets called by the runtime. Use this method to add services to the container.
@@ -60,15 +85,22 @@ namespace reportWeb
             CellReport.core.expr.ExprHelper.buildFuncMap();
             //CellReport.core.expr.ExprHelper.AddFunc(typeof(CellReport.function.Func_md5));
             CellReport.core.expr.ExprHelper.AddFunc(typeof(CellReport.function.Func_qr_code));
+            CellReport.core.expr.ExprHelper.AddFunc(typeof(CellReport.function.Func_kata));
+            CellReport.core.expr.ExprHelper.AddFunc(typeof(CellReport.function.Func_kata_Variable));
 
-            services.AddDbContext<ReportDbContext>(optionsBuilder =>
-            {
-                var folder = Environment.SpecialFolder.LocalApplicationData;
-                var path = Environment.GetFolderPath(folder);
-                var DbPath = $"{path}{System.IO.Path.DirectorySeparatorChar}report.db";
-                //var dataAppSetting = Configuration.GetSection("ConnectionSetting").Get<ConnectionSetting>();
-                optionsBuilder.UseSqlite($"Data Source=report.db");
-            });
+            //IWebHostEnvironment env;
+            //ReportDbContext.EnsureDbExists(env);
+
+            services.AddScoped<ReportDbContext>();
+
+            //services.AddDbContext<ReportDbContext>(optionsBuilder =>
+            //{
+            //    var folder = Environment.SpecialFolder.LocalApplicationData;
+            //    var path = Environment.GetFolderPath(folder);
+            //    var DbPath = $"{path}{System.IO.Path.DirectorySeparatorChar}report.db";
+            //    //var dataAppSetting = Configuration.GetSection("ConnectionSetting").Get<ConnectionSetting>();
+            //    optionsBuilder.UseSqlite($"Data Source=report.db");
+            //});
             //添加身份认证方案
             var jwtConfig = Configuration.GetSection("Jwt").Get<JwtConfig>();
             services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -199,84 +231,23 @@ namespace reportWeb
                 CSRedisClient redisClient = new CSRedisClient(CellReport.Redis_Cache.redis_str);
                 RedisHelper.Initialization(redisClient);
             }
+            var loc=System.Reflection.Assembly.GetEntryAssembly().Location;
             DbProviderFactories.RegisterFactory("Microsoft.Data.Sqlite", SqliteFactory.Instance);
             foreach(var one in Configuration.GetSection("DbProviderFactories").Get<DbProviderCfg[]>())
             {
-                var ass = System.Reflection.Assembly.Load( one.DllName);
+                //var ass = System.Reflection.Assembly.Load( one.DllName);
+                var file_name = Path.GetDirectoryName(loc) + "/" + one.DllName + (one.DllName.EndsWith(".dll") ? "" : ".dll");
+                var ass = System.Reflection.Assembly.LoadFrom(file_name);
                 DbProviderFactory f = ass.GetType(one.FactoryClass).GetField(one.InstanceName).GetValue(null) as DbProviderFactory;
                 DbProviderFactories.RegisterFactory(one.Name, f );
-                
             }
 
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env,ReportDbContext _reportDbContext)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
-            
-            _reportDbContext.Database.EnsureCreated();//数据库不存在的话，会自动创建
-            if (_reportDbContext.Rpt_group.Count() == 0)
-            {
-                var main_path = new DirectoryInfo(Path.Combine(env.ContentRootPath, "..", "reportdefine_root", "default")).FullName; 
-                _reportDbContext.Rpt_group.Add(new Rpt_group()
-                {
-                    Id = "default",
-                    owner = "admin",
-                    default_page = "default",
-                    name = "缺省",
-                    report_path = main_path
-                });
-                if (!Directory.Exists(main_path))
-                    Directory.CreateDirectory(main_path);
-                main_path = new DirectoryInfo(Path.Combine(env.ContentRootPath, "../example")).FullName;
-                _reportDbContext.Rpt_group.Add(new Rpt_group()
-                {
-                    Id = "example",
-                    owner = "admin",
-                    default_page = "default",
-                    name = "例子",
-                    report_path = main_path,
-                    db_connection_list=new List<Rpt_db_connection>()
-                    { 
-                        new Rpt_db_connection() { conn_str=$"Data Source={main_path}/test.db", db_type="Microsoft.Data.Sqlite", name="testsqlite"},
-                    }
-                });
-                _reportDbContext.SaveChanges();
-            }
-            if (_reportDbContext.Rpt_config.Count() == 0)
-            {
-                _reportDbContext.Rpt_config.Add(new Rpt_config()
-                {
-                    login_script = "",
-                });
-                _reportDbContext.SaveChanges();
-            }
-
-            using (var report_db = SqliteFactory.Instance.CreateConnection())
-            {
-                report_db.ConnectionString = "Data Source=report.db";
-                report_db.Open();
-                using var cmd = report_db.CreateCommand();
-                cmd.CommandText = $"PRAGMA TABLE_INFO(Rpt_config)";
-                using var sr = cmd.ExecuteReader();
-                bool has_license_txt = false;
-                while (sr.Read())
-                {
-                    if (sr[1].ToString() == "zcm")
-                    {
-                        has_license_txt = true;
-                    }
-                }
-                using var cmd2 = report_db.CreateCommand();
-                if (has_license_txt == false)
-                {
-                    cmd2.CommandText = $"alter table Rpt_config add zcm TEXT";
-                    cmd2.ExecuteNonQuery();
-                }
-
-            }
-            var rpt_config=_reportDbContext.Rpt_config.First();
-            CellReport.util.KeyAndPassword.yan_zheng_zcm(rpt_config.zcm);
+            ReportDbContext.EnsureDbExists(env);
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
@@ -309,10 +280,17 @@ namespace reportWeb
                             //System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
                             WriteIndented = true
                         };
+                        System.Exception inner_e = ex;
+                        StringBuilder sb = new();
+                        while (inner_e != null)
+                        {
+                            sb.Append("【").AppendLine(inner_e.Message).Append("】");
+                            inner_e = inner_e.InnerException;
+                        }
                         var errObj = JsonSerializer.Serialize(new
                         {
                             errocode = -1,
-                            message = ex.Message,
+                            message = sb.ToString(),
                             stackerr = ex.StackTrace
                         }, json_option);
                         await context.Response.WriteAsync(errObj);
@@ -325,7 +303,7 @@ namespace reportWeb
             string static_path = Configuration["static_path"];
             if (String.IsNullOrEmpty(static_path))
                 static_path = Path.Combine(env.WebRootPath, "../static");
-            if(!(new DirectoryInfo(static_path).Exists))
+            if (!(new DirectoryInfo(static_path).Exists))
             {
                 Directory.CreateDirectory(static_path);
             }
@@ -334,6 +312,23 @@ namespace reportWeb
                 FileProvider = new PhysicalFileProvider(static_path),
                 RequestPath = new PathString("/Static"),
             });
+            static_path = Path.Combine(env.WebRootPath, "../static/tmp_files");
+            if (!(new DirectoryInfo(static_path).Exists))
+            {
+                Directory.CreateDirectory(static_path);
+            }
+            // 创建定时器
+            Timer timer = new();
+            // 设置定时器的间隔（以毫秒为单位）
+            timer.Interval = 60*1000; // 每秒执行一次
+            // 设置定时器的重复行为
+            timer.AutoReset = true; // 设置为 true，表示重复执行；设置为 false，表示只执行一次
+            // 添加定时器的事件处理程序
+            timer.Elapsed += (sender, e) => Timer_Elapsed(sender, e, Path.Combine(env.WebRootPath, "../static/tmp_files")); ;
+            // 使用 Tag 属性存储参数
+            // 启动定时器
+            timer.Start();
+
             app.Use(next => context =>
             {
                 var cur_path = context.Request.Path.Value;
@@ -354,10 +349,8 @@ namespace reportWeb
                 
                 var scopedObj = context.RequestServices.GetService<ScopedObj>();
                 //scopedObj.rpt_group = context.RequestServices.GetService<ReportDb>().findGroupById(grp);
-                scopedObj.rpt_group = context.RequestServices.GetService <ReportDbContext>().Rpt_group.AsNoTracking()
-                .Include(x=>x.db_connection_list)
-                .Where(i => i.Id == grp)
-                .FirstOrDefault();
+                var query=context.RequestServices.GetService<ReportDbContext>();
+                scopedObj.rpt_group = query.GetRpt_Group(grp);
                 scopedObj.WebHostEnvironment = env;
                 
                 context.Request.Path = seg_arr[0];
@@ -416,5 +409,6 @@ namespace reportWeb
                 }
             });
         }
-    }
+        
+     }
 }

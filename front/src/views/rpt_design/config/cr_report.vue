@@ -11,7 +11,12 @@
         active-text="不使用"  
         > </el-switch>
     </el-form-item> 
-
+    <el-form-item label="分页方式">
+      <el-switch  v-model="cur_grid._backend_split_page"  active-color="#ff4949" inactive-color="#13ce66"  inactive-text="前端" 
+    active-text="后端"  active-value="true"    inactive-value="false"
+    > </el-switch>
+    </el-form-item> 
+   
     <el-form-item label="每页行数"> 
         <el-input-number v-model="data.page_size" placeholder="每页行数"></el-input-number>
     </el-form-item> 
@@ -23,8 +28,9 @@
         <el-switch  v-model="cur_grid.as_tree"  active-color="#ff4949" inactive-color="#13ce66"  inactive-text="不使用" active-text="使用"  
         > </el-switch>
     </el-form-item>
-    <el-form-item label="自动行高"> 
-        <el-switch  v-model="data.auto_line_height"  active-color="#ff4949" inactive-color="#13ce66"  inactive-text="不使用" active-text="使用"  
+    <el-form-item label="自动行高">
+        <el-switch  v-model="cur_grid._auto_line_height"  active-color="#ff4949" inactive-color="#13ce66"  inactive-text="不使用" active-text="使用"  
+        active-value="true"    inactive-value="false"
         > </el-switch>
     </el-form-item>
     <el-form-item label="easuyi大数据">
@@ -38,7 +44,6 @@
     :visible.sync="paper_setting_dialogVisible" />
     
     
-      <cr_set_fresh :data="data" />
 
   </div>
 </template>
@@ -51,9 +56,11 @@ export default {
     components: {cr_set_fresh,paperSetting},
     inject: ["context"],
     props: ['data'],
+    mounted(){
+    },
     data(){
       return {
-        paper_setting_dialogVisible:false
+        paper_setting_dialogVisible:false        
       }
     },
     methods:{
@@ -64,9 +71,20 @@ export default {
         this.$nextTick(()=>this.data.page_sizes=aaa)        
       }
     },
+    watch:{
+      "data.page_size":{
+            handler(val,oldVal){
+              let ret= this.context.report.AllGrids.grid.find(x=>x._name==this.data.gridName)
+              ret._page_size=val
+            }
+          }
+    },
     computed:{
       paperSetting(){
         return JSON.parse(this.cur_grid.paperSetting??"{}")
+      },
+      all_dataset(){
+        return Enumerable.from(this.context.report.dataSets.dataSet).where(x=>x._type=='sql').select(x=>x._name).toArray()
       },
       cur_grid(){
             let ret= this.context.report.AllGrids.grid.find(x=>x._name==this.data.gridName)
@@ -78,6 +96,10 @@ export default {
             }
             if(ret.no_use_parent_css==undefined){
                 this.$set(ret,"no_use_parent_css","0")
+            }
+            if(ret._backend_split_page==undefined){
+              this.$set(ret,"_backend_split_page",false)
+              this.$set(ret,"_page_size",20) 
             }
             return ret
         }

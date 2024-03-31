@@ -4,23 +4,30 @@ import install_component from './install_component';
 let ElementUI=window.ELEMENT
 Vue.use(ElementUI, {size: 'mini'})
 Vue.use(install_component)
+Vue.use(window.AVUE, {size: 'mini'})
 Vue.config.productionTip = false
 import loading from "@/util/loading"
 import axios from 'axios'
-
+import DlgDraggable from "vue-element-dialog-draggable"
+Vue.use(DlgDraggable, {
+  containment: true //Constrains dragging to within the bounds of the window.  Default: false.
+});
 //axios.defaults.timeout = 100*1000;
 
-//axios.defaults.baseURL = baseUrl;
+axios.defaults.baseURL = ".";
 
 import { Message } from 'element-ui'
 import website from '@/config/website';
 //HTTPrequest拦截
 axios.interceptors.request.use(config => {
+  if(config.showLoading)
+    loading.show(config)
   const meta = (config.meta || {});
   const isToken = meta.isToken === false;
-  config.headers['needType']='json'
-  //config.headers['worker_no']='14100298'
-  config.headers['Authorization']='Bearer d2762dbd'
+  if(config.headers['needType']==undefined)
+    config.headers['needType']='json'
+  if(config.headers['Authorization']==undefined)
+    config.headers['Authorization']='Bearer d2762dbd'
   if(window.__real_referer)
     config.headers['realReferer']=window.__real_referer
   if(window.__Authorization)
@@ -41,12 +48,15 @@ function sleep (time) {
 axios.interceptors.response.use(async res => {
   const status = Number(res.status) || 200;
   const statusWhiteList = website.statusWhiteList || [];
-  const message = res.data.message || '未知错误'+res.data.toString();
+  const cur_message =function(){return res.data.message || '未知错误'+(res.data.toString?res.data.toString():'') };
+  //const message = res.data.message || '未知错误'+res.data.toString();
   //如果在白名单里则自行catch逻辑处理
   if (statusWhiteList.includes(status)) return Promise.reject(res);
   //如果是401则跳转到登录页面
   if (status === 401) store.dispatch('FedLogOut').then(() => router.push({ path: '/login' }));
-  if(res.data.message!=undefined && res.data.message.search('正在刷新缓存')){
+  if(res.config.showLoading)
+    loading.hide(res.config)
+  if(res.data?.message && res.data.message.search('正在刷新缓存')>=0){
       {
           loading.show(res.config)
           await sleep(5000);  
@@ -58,18 +68,26 @@ axios.interceptors.response.use(async res => {
   // 如果请求为非200否者默认统一处理
   if (status !== 200) {
       Message({
-          message: message,duration:10000,showClose: true,
+          message: cur_message(),duration:10000,showClose: true,
           type: 'error'
       })
       return Promise.reject(res.data)
   }
-  return res.data;
-}, error => {
+  if(res.config.needResponse)
+    return res;
+  else
+    return res.data;
+}, (error) => {
   let err_txt=error.response.data?.message||error.response.statusText
   Message({
       message: err_txt,duration:10000,showClose: true,
       type: 'error'
   })
+  try{
+    if(res&&res?.config?.showLoading){
+      loading.hide(res.config)
+    }
+  }catch{}
   return Promise.reject(new Error(err_txt));
 })
 new Vue({

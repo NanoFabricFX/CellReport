@@ -213,12 +213,12 @@ function build_col_arr(s_col,e_col){
     return ret
 }
 export default class ResultGrid2HtmlTable{
-    constructor(param_grid,el,setting,footer2,defaultsetting){
+    constructor(param_grid,el,setting,defaultsetting){
         let {name,tableData,extend_lines,rowlenArr,hyperlink,conditionformat,
-            columnlenArr,styles,loc_style,colName_lines,my_sort,columns,
+            columnlenArr,styles,loc_style,colName_lines,my_sort,columns,row_page_break_set,
             config_merge,reportDefaultCss,optimize,abs_to_design} ={...param_grid}
         this.el=el
-        this.footer2=footer2
+        
         this.sort_col={"col":-1,"isAsc":0}
         this.setting=setting
         this.defaultsetting=defaultsetting
@@ -278,16 +278,8 @@ export default class ResultGrid2HtmlTable{
                 }                
             })
         })
-        this.cur_page=1
-        this.page_size=setting.page_size??20
-        if(!optimize)
-        {
-            setting.page_size=tableData.length
-        }
-        if(tableData.length<=1000)
+        if(tableData.length<= (window.cellreport.cfc_max_line??1000))
             this.cell_cf= cellFromatCompute(cdf_arr,tableData)
-
-        
         this.tableData_bridge=new Array(tableData.length)//里面存的是指向原始表的行号
         for(let idx=0;idx<tableData.length;idx++)
             this.tableData_bridge[idx]=idx
@@ -314,9 +306,11 @@ export default class ResultGrid2HtmlTable{
             let rowData=this.param_grid.tableData[rowNo]
             let newRowData=new Array(Object.keys(this.param_grid.columnlenArr).length)
             ret.push(newRowData)
-            rowData.slice(0,-1).forEach((cell,colNo)=>{
+            if(this.param_grid.columns[this.param_grid.columns.length-1]!=null)
+                rowData=rowData.slice(0,-1)
+            rowData.forEach((cell,colNo)=>{
                 let m
-                if(rowNo<=this.param_grid.colName_lines[1])
+                if(window.cellreport.hn_old && rowNo<=this.param_grid.colName_lines[1])
                     m=cell
                 else
                     m=this.param_grid.hyperlink[`${rowNo}_${colNo}`]??cell
@@ -355,7 +349,7 @@ export default class ResultGrid2HtmlTable{
             
             rowData.slice(0,-1).forEach((cell,colNo)=>{
                 let m
-                if(rowNo<=this.param_grid.colName_lines[1])
+                if(window.cellreport.hn_old && rowNo<=this.param_grid.colName_lines[1])
                     m=cell
                 else
                     m=this.param_grid.hyperlink[`${rowNo}_${colNo}`]??cell
@@ -404,9 +398,9 @@ export default class ResultGrid2HtmlTable{
     }
     total(){
         let ret= this.tableData_bridge.length -  (this.param_grid.tableData.length - this.param_grid.extend_lines[1]) - this.param_grid.extend_lines[0] + 1
-        console.info(ret +"--"+(this.param_grid.extend_lines[1]- this.param_grid.extend_lines[0] + 1))
+        //console.info(ret +"--"+(this.param_grid.extend_lines[1]- this.param_grid.extend_lines[0] + 1))
         return ret
-        return this.param_grid.extend_lines[1]- this.param_grid.extend_lines[0] + 1
+        //return this.param_grid.extend_lines[1]- this.param_grid.extend_lines[0] + 1
     }
     handleSizeChange(){
 
@@ -444,10 +438,19 @@ export default class ResultGrid2HtmlTable{
                     break;
                 case '<':
                     tmp_arr=Enumerable.from(tmp_arr).where(x=>convert_func(x.value[for_col])<traget_value).toArray();
-                    break;                                    
+                    break; 
                 case '<=':
                     tmp_arr=Enumerable.from(tmp_arr).where(x=>convert_func(x.value[for_col])<=traget_value).toArray();
+                    break;
+                case 'contains':
+                    tmp_arr=Enumerable.from(tmp_arr).where(x=>x.value[for_col]?.toString()?.indexOf(traget_value)>=0).toArray();
+                    break;  
+                case 'start':
+                    tmp_arr=Enumerable.from(tmp_arr).where(x=>x.value[for_col]?.toString()?.startsWith(traget_value)).toArray();
                     break;                                    
+                case 'end':
+                    tmp_arr=Enumerable.from(tmp_arr).where(x=>x.value[for_col]?.toString()?.endsWith(traget_value)).toArray();
+                    break;   
             }
         }
         
@@ -567,8 +570,9 @@ export default class ResultGrid2HtmlTable{
                 row_type='isComment'
             else
                 row_type='isComment isAfterExtend'
+            let row_h=rowlenArr[rowNo]??rowlenArr["default"]
             sb.append(`<tr ${row_type} data-n=${rowNo} data-old="${row_pr&& row_pr!=0?'none':'table-row'}"
-            style='display:${row_pr&& row_pr!=0?'none':'table-row'}; height:${rowlenArr[rowNo]??rowlenArr["default"]}px' >`)
+                style='display:${(row_h==0 || (row_pr&& row_pr!=0 ) )?'none':'table-row'}; height:${row_h}px' >`)
             
             rowData.forEach((cell,colNo)=>{
                 if(false== col_arr.includes(colNo)){
@@ -605,6 +609,9 @@ export default class ResultGrid2HtmlTable{
                 sb.append(` style='${this.calc_style(cell,max_width*this.ratio,max_height)};'`)
                 sb.append(` class=' ${cell.clazz} `)
                 let cell_sort=my_sort[`${rowNo}_${colNo}`]
+                if(this.param_grid.mobile_col_button_arr && this.param_grid.mobile_col_button_arr.length >0  && rowNo>=colName_lines[0] && rowNo<=colName_lines[1]){
+                    cell_sort=true
+                }
                 let disp=(cell.m && cell.m.v)? cell.m.v : cell.m
                 
                 if(this.tree_node_set.has(`${rowNo}_${colNo}`))
@@ -613,7 +620,7 @@ export default class ResultGrid2HtmlTable{
                     disp=`<img style="width: 100%;height: 100%;" src='${disp}'>`
                 }//max-height:${max_height-1}px;
                 let style=`style="max-width:${max_width*this.ratio-4}px;width:${max_width*this.ratio-4}px;`
-                if(!this.setting.auto_line_height && !window.cr_auto_line_height)
+                if(!this.param_grid.auto_line_height )
                     style=style+`max-height:${max_height-1}px;`// 不能设置height，否则就不会上下居中了
                 style=style+'"'
                 if(this.optimize && cell_sort!=undefined){
@@ -630,7 +637,7 @@ export default class ResultGrid2HtmlTable{
                    </div></td>`)
                 }
                 else
-                    sb.append(`' data-c=${colNo}><div class="cr-cell" ${style}> ${disp??''}</div></td>`)
+                    sb.append(`' data-c=${colNo}><div class="cr-cell" ${style}>${disp??''}</div></td>`)
             })
             if(gutter)
                 sb.append(`<td class="gutter"></td>`)
@@ -691,12 +698,21 @@ export default class ResultGrid2HtmlTable{
         else{
             this.fix_rows=0
         }
-        // body 
-        table_obj=this._inner_table(this.fix_rows +(cur_page-1)*page_size
-            ,this.param_grid.need_footer?
-                Math.min(this.fix_rows +cur_page*page_size ,this.param_grid.extend_lines[1]+1 )
+        let s_row,e_row
+        if(!this.param_grid.optimize && this.param_grid.row_page_break_set.length>0){
+            s_row=cur_page==1?this.fix_rows:this.param_grid.row_page_break_set[cur_page - 2]
+            
+            if(cur_page==this.param_grid.row_page_break_set.length)
+                e_row=this.param_grid.tableData.length
+            else
+                e_row=this.param_grid.row_page_break_set[cur_page-1]
+        }else{
+            s_row=this.fix_rows +(cur_page-1)*page_size
+            e_row=this.param_grid.need_footer? Math.min(this.fix_rows +cur_page*page_size ,this.param_grid.extend_lines[1]+1 )
                 : this.fix_rows +cur_page*page_size 
-            ,  col_arr)
+        }
+        // body 
+        table_obj=this._inner_table(s_row,e_row,col_arr)
         min_width=Math.min(this.el.clientWidth-this.ScrollBarWidth-2, table_obj.table_width+(this.ratio==1?0:this.ScrollBarWidth))
         sb.append(`<div id='reportDiv${this.param_grid.name}' class="cr-table__body-wrapper is-scrolling-middle" 
         style='background-color:${background_color};height: calc(100% - ${head_height+foot_height}px);width:${min_width+this.ScrollBarWidth+3}px'>\n
@@ -723,11 +739,7 @@ export default class ResultGrid2HtmlTable{
             add_other()
             sb.append(table_obj.sb.toString(''))
             // 固定列，body
-            table_obj=this._inner_table(this.fix_rows +(cur_page-1)*page_size,
-                    this.param_grid.need_footer?
-                    Math.min(this.fix_rows +cur_page*page_size ,this.param_grid.extend_lines[1]+1 )
-                    : this.fix_rows +cur_page*page_size ,
-                    build_col_arr(0,this.fix_cols))
+            table_obj=this._inner_table(s_row,e_row , build_col_arr(0,this.fix_cols))
             sb.append(`<div id='reportDiv${this.param_grid.name}Left' class="cr-table__fixed-body-wrapper" 
             style='background-color:${background_color};top: ${head_height+0.5}px;height: calc(100% - ${head_height+foot_height}px)'>\n
             <table class='cr-table__body  reportDefaultCss'  width=${table_obj.table_width}  `)  //height=${table_obj.table_height}
@@ -792,7 +804,7 @@ export default class ResultGrid2HtmlTable{
         //sb.append("\n</style>\n")  
         //sb.append("<style >\n")
         Object.entries(this.param_grid.styles).forEach(([key, value])=>{
-            sb.append(".").append(key).append(' {')
+            sb.append(`#cr_id_${grid_id} .`).append(key).append(' {')
             //if(is_Safari)
             sb.append(value.replaceAll("0.5pt ",'1px '))
             //else sb.append(value)
@@ -806,8 +818,8 @@ export default class ResultGrid2HtmlTable{
         */
         sb.append(".reportDefaultCss{").append(this.param_grid.reportDefaultCss)
         .append(`}
-        tr.hover-row>td ${window.cr_hover_row||'{background-color:lightgray!important;}'}
-        tr.active-row>td  ${window.cr_active_row || '{background-color: #7cbcfc!important;}'}
+        tr.hover-row>td ${window.cellreport.cr_hover_row||'{background-color:lightgray!important;}'}
+        tr.active-row>td  ${window.cellreport.cr_active_row || '{background-color: #7cbcfc!important;}'}
             .cr-cell {margin: 0;box-sizing: border-box;
                 padding: 0 2px;
                 white-space: wrap;

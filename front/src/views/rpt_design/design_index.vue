@@ -73,7 +73,7 @@
                <grid-layout-form v-if="widgetForm!=null && formType=='gridLayout'" ref="gridlayout"
                :layout.sync="widgetForm" 
                :select.sync="selectWidget"
-               :big_screen_scale="big_screen_scale" :big_screen_scale_x="big_screen_scale_x" :big_screen_scale_y="big_screen_scale_y"
+               :scale="scale"
                 @change="handleHistoryChange(widgetForm)"
                 >
               </grid-layout-form>          
@@ -83,7 +83,7 @@
       <!-- 右侧配置 -->
       <el-aside class="widget-config-container" :width="rightWidth"> 
         <div style="display:flex;height:100%">
-         <el-slider v-if="report.defaultsetting.big_screen=='1'" v-model="big_screen_scale" vertical style="align-self:flex-end;margin: 0;width: 10px;height: 200px;" ></el-slider>
+         <el-slider v-if="report.defaultsetting.big_screen=='1'" v-model="scale.v" vertical style="align-self:flex-end;margin: 0;width: 10px;height: 200px;" ></el-slider>
         <ul v-if="cur_select_type=='cell'" ghost-class="ghost" style="padding-left: 10px;font-size:12px;">
             <li  style="display: flex;padding-bottom: 10px;" >
               <label style="width:100px;padding-top:5px;" >扩展方向</label>
@@ -111,7 +111,7 @@
                       {display:'显示值表达式',val:'_displayValueExpr'},
                       {display:'值表达式',val:'_valueExpr'},
                       {display:'加到style中',val:'_append'},
-                      {display:'pdf输出时，单元格行后分页(true)',val:'_row_page_break'},
+                      //{display:'pdf输出时，单元格行后分页(true)',val:'_row_page_break'},
                     ]"  
                 style="display: flex;padding-bottom: 10px;" :key="item.display" >
               <label style="width:120px;padding-top:5px;">{{item.display}}</label>
@@ -134,6 +134,23 @@
               </el-select>
             </li>
         </ul>
+        <div v-else-if="selectWidget.type=='cr_row' || selectWidget.type=='cr_col'" >
+          <ul ghost-class="ghost" style="padding-left: 10px;font-size:12px;">
+            <li  style="display: flex;padding-bottom: 10px;" >
+              <label style="width:100px;padding-top:5px;" >是否隐藏：</label>
+              <el-input placeholder="返回true，隐藏" v-model="colrow_obj._hidden"></el-input>      
+              <el-button  @click="expr_edit(colrow_obj,{display:'行列是否显示的表达式',val:'_hidden'})" circle  type="success" size="mini" icon="el-icon-edit"
+                              style="padding: 4px;margin-left: 5px;    width: 30px;height: 30px;">
+                    </el-button>    
+            </li>
+            <li  style="display: flex;padding-bottom: 10px;" v-if="selectWidget.type=='cr_row' " >
+              <label style="width:100px;padding-top:5px;" >是否行后分页：</label>
+              <el-input placeholder="返回true，行后分页:" v-model="colrow_obj._row_page_break"></el-input>      
+              <el-button  @click="expr_edit(colrow_obj,{display:'是否行后分页',val:'_row_page_break'})" circle  type="success" size="mini" icon="el-icon-edit"
+                              style="padding: 4px;margin-left: 5px;    width: 30px;height: 30px;"> </el-button>    
+          </li>
+          </ul>
+        </div>
         <widget-config  v-else style="flex:1"
           :data="selectWidget" 
           :layout_config="cur_layout_item"
@@ -165,7 +182,6 @@ import Preview from './preview.vue'
 import simpleGuide from './simpleGuide.vue'
 import Config from './config'
 import install_component from './install_component'
-import  codemirror  from './element/vue-codemirror.vue'
 import templateManger from "./templateManger.vue"
 import widgetDialog from "./widgetDialog.vue"
 import x2js from 'x2js' 
@@ -182,7 +198,7 @@ if(window.cr_allWidget==undefined){
 export default {
   name: "FormDesign",
   mixins: [history],
-  components: {paramManger,ExprEditorDialog,simpleGuide,codemirror,widgetDialog,
+  components: {paramManger,ExprEditorDialog,simpleGuide,widgetDialog,
         Draggable,widgetEmpty,WidgetForm,WidgetConfig,templateManger,
         datasetManger2, Preview, },
   
@@ -207,8 +223,8 @@ export default {
     // 在同一组件对应的多个路由间切换时触发
   async beforeRouteUpdate(to, from, next) {
     let _this=this
-    console.info(x2jsone.js2xml({report:this.fields}))
-    console.info("prepare cache:"+_this.report.reportName)    
+    //console.info(x2jsone.js2xml({report:this.fields}))
+    //console.info("prepare cache:"+_this.report.reportName)    
     this.save_fix()
     this.layout_mode=''
     report_cache[_this.report.reportName]={
@@ -340,7 +356,7 @@ export default {
       let ret=new Set()
       this.report.dataSets.dataSet.forEach(x=>{ret.add(x._name)})
       return ret
-    },
+    }
   },
   data(){
       return {    
@@ -350,9 +366,7 @@ export default {
           },//报表运行后的结果
         in_exec_url:{stat:false},//当前是否已经在点击后取数
         preview_dialogVisible:false,
-        big_screen_scale:100,
-        big_screen_scale_x:100,
-        big_screen_scale_y:100,
+        scale:{x:100,y:100,v:100},
         simpleGuide_dialogVisible:false,
         widget_dialogVisible:false,
         datamanger_dialogVisible:false,
@@ -388,6 +402,7 @@ export default {
           },
         widgetForm: widget_row_col_layout(),//布局显示
        queryForm:{},
+       colrow_obj:{_hidden:'',_row_page_break:''}
       }
   },
   methods:{
@@ -418,10 +433,12 @@ export default {
         clickedEle:this.clickedEle,
         in_exec_url:this.in_exec_url,
         mode:"design",
+        rpt_this:this,
         allElementSet:this.allElementSet,
         all_sheet_windows:this.all_sheet_windows,
         parent_defaultsetting:this.report.parent_defaultsetting,
         fields:this.fields   ,
+        scale:this.scale,
         templateGuide:`以等号开始的是公式，如：=cur_ds?cur_ds[1][4]:14<br/>
       cur_ds是指定的依赖数据集的数据，为一个二维数组，第一行是列名，第二行开始是数据。计数是从0开始。
       <br/>也就是说cur_ds[1]就是数据集的第一行数据
@@ -569,7 +586,7 @@ export default {
         this.report.defaultsetting['BACKGROUND-COLOR']="transparent"
       this.report.reportName=reportName
       
-      if(this.report.layout){
+      if(this.report.layout&&this.report.layout!='null'){
         this.widgetForm=JSON.parse(this.report.layout)
           if (!Array.isArray(this.widgetForm))
           this.change_layout()  
@@ -598,10 +615,10 @@ export default {
       });
       //this.selectWidget={}
       if(this.report.defaultsetting.big_screen=='1'){
-        this.big_screen_scale_y=100*this.$refs.grid_layout_form.$el.clientHeight/parseInt(this.report.defaultsetting.screen_height)
-        this.big_screen_scale_x=100*this.$refs.grid_layout_form.$el.clientWidth/parseInt(this.report.defaultsetting.screen_width)
-        this.big_screen_scale=Math.min(this.big_screen_scale_x,this.big_screen_scale_y)  
-        this.big_screen_scale_x=this.big_screen_scale_y=this.big_screen_scale_x              
+        this.scale.y=100*this.$refs.grid_layout_form.$el.clientHeight/parseInt(this.report.defaultsetting.screen_height)
+        this.scale.x=100*this.$refs.grid_layout_form.$el.clientWidth/parseInt(this.report.defaultsetting.screen_width)
+        this.scale.v=Math.min(this.scale.x,this.scale.y)  
+        //this.big_screen_scale_x=this.big_screen_scale_y=this.big_screen_scale_x 
       }
       this.setSelectWidgetForLayout();
     },
@@ -701,16 +718,48 @@ export default {
     
     //-=========================    
   selectChange(sheet,luckysheet_select_save,sheet_window){
-        this.cur_select_type='cell'
-        this.selectWidget={prop:'--'}
         this.cur_sheet=sheet
         this.sheet_window=sheet_window
         let cur_postion=sheet.luckysheet_select_save[0]
+        if(cur_postion.row_select && cur_postion.column_select ){
+          this.selectWidget=this.findGridInWidgeForm(this.widgetForm,sheet_window.gridName)
+          return
+        }
+        if(cur_postion.row_select ){
+          this.selectWidget={prop:'--'}
+          let obj=sheet.cr_rows[cur_postion.row_focus]
+          Object.keys(this.colrow_obj).forEach(x=>this.colrow_obj[x]='');
+          Object.assign(this.colrow_obj, obj)
+          this.selectWidget={type:'cr_row',data:obj}
+          return
+        }
+        if(cur_postion.column_select ){
+          this.selectWidget={prop:'--'}
+          let obj=sheet.cr_columns[cur_postion.column_focus]
+          Object.keys(this.colrow_obj).forEach(x=>this.colrow_obj[x]='');
+          Object.assign(this.colrow_obj, obj)
+          this.selectWidget={type:'cr_col',data:obj}     
+          return          
+        }
+        this.cur_select_type='cell'
+        this.selectWidget={prop:'--'}
+
+        
         let cell=sheet.data[cur_postion.row_focus][cur_postion.column_focus]
         if(this.cur_cell!= cell)
           this.can_watch_cell=false//切换单元格后，对cur_cell.cr的第一次监控 ，不需要监控
-        this.cur_cell= cell?? {"cr":{"_displayValueExpr":"=@value","_valueExpr":"",'_extendDirection':"none"}}  
-        
+        let default_cr={"_displayValueExpr":"=@value","_valueExpr":"",'_extendDirection':"none"
+                        ,'_FONT':this.report.defaultsetting["FONT"]
+                        ,'_FONT-SIZE':this.report.defaultsetting["FONT-SIZE"]
+                        ,'_background-color':this.report.defaultsetting["BACKGROUND-COLOR"]
+                        ,'_color':this.report.defaultsetting["COLOR"]
+                  }
+        if(cell){
+          cell.cr={...default_cr ,...cell.cr}
+          this.cur_cell= cell
+        }
+        else 
+        this.cur_cell={"cr":default_cr}  
     },
     
     expr_edit(cur_cell,prop){
@@ -738,7 +787,6 @@ export default {
         cell.bg=this.report.defaultsetting["BACKGROUND-COLOR"]
     },
     rangePasteBefore(select_save,txtdata,copy_save){
-      
       if(copy_save.copyRange==undefined || select_save.length>1 || copy_save.copyRange.length>1)
         return 
       this.rangePaste_val={column:select_save[0].column_focus- copy_save.copyRange[0].column[0],
@@ -793,6 +841,11 @@ export default {
     },
     lucky_updated(val,from_cull_cell_cr){
       let _this=this
+      // 如果从这里的setCellValue API进入，则不执行，防止递归循环
+      if(this.setCellFromAPI){
+        return
+      }
+      this.setCellFromAPI = true;
       function _inner_add_del(cell,val){
         if(cell && cell.mc && cell.mc.rs==undefined){
           delete cell.v
@@ -815,17 +868,14 @@ export default {
         if(cell.cr['_topHead']!=undefined && cell.cr['_topHead'].trim()!='')
           cell.cr['_topHead']= _this.add_del_rc_rebuild_expr(val,"="+cell.cr['_topHead']).substring(1)
       }
-// 如果从这里的setCellValue API进入，则不执行，防止递归循环
-      if(this.setCellFromAPI){
-        return
-      }
+
       let grid= this.report.AllGrids.grid.find(a=>a._name==_this.sheet_window.gridName)
       function add_rc(val){
         if(_this.sheet_window.luckysheet.is_in_simapleGuid){
           delete _this.sheet_window.luckysheet.is_in_simapleGuid
          return
         }
-                //删除被lucky添加的无用单元格
+        //删除被lucky添加的无用单元格
         if("addRC"==val.type){
           _this.cull_cell_cr={}
           let ctrlValue=val.ctrlValue
@@ -834,9 +884,8 @@ export default {
             if(ctrlValue.direction=="lefttop"){
               for(let row=ctrlValue.index ;row<ctrlValue.index  + ctrlValue.len;row++){
                   for(let col=0  ;col<val.curData[row].length  ;col++){
-                      console.info(row,col)
                       let cell=val.curData[row][col]
-                      if(cell.mc){
+                      if(cell?.mc){
                         delete cell.cr
                         continue
                       }
@@ -849,9 +898,8 @@ export default {
             }else{
               for(let row=ctrlValue.index +1 ;row<=ctrlValue.index  + ctrlValue.len;row++){
                   for(let col=0  ;col<val.curData[row].length  ;col++){
-                      console.info(row,col)
                       let cell=val.curData[row][col]
-                      if(cell.mc){
+                      if(cell?.mc){
                         delete cell.cr
                         continue
                       }
@@ -866,10 +914,9 @@ export default {
           else if(ctrlValue && ctrlValue.rc=='c'){
             if(ctrlValue.direction=="lefttop"){
               for(let row=0;row<val.curData.length;row++){
-                  for(let col=ctrlValue.index  ;col<ctrlValue.index  + ctrlValue.len  ;col++){
-                      console.info(row,col)
+                  for(let col=ctrlValue.index  ;col<ctrlValue.index  + ctrlValue.len  ;col++){                      
                       let cell=val.curData[row][col]
-                      if(cell.mc){
+                      if(cell?.mc){
                         delete cell.cr
                         continue
                       }
@@ -880,10 +927,9 @@ export default {
                 }
             }else{
               for(let row=0;row<val.curData.length;row++){
-                  for(let col=ctrlValue.index+1  ;col<=ctrlValue.index  + ctrlValue.len  ;col++){
-                      console.info(row,col)
+                  for(let col=ctrlValue.index+1  ;col<=ctrlValue.index  + ctrlValue.len  ;col++){                      
                       let cell=val.curData[row][col]
-                      if(cell.mc){
+                      if(cell?.mc){
                         delete cell.cr
                         continue
                       }
@@ -896,11 +942,18 @@ export default {
           }
         }
       }//end function add_rc
-
-      this.setCellFromAPI = true;
       try{
         add_rc(val)
         if(["addRC","delRC"].includes( val.type)){
+          let lucky_sheet=this.sheet_window.luckysheet.getSheet(0)
+          let cur_rc=val.ctrlValue.rc=='r' ? lucky_sheet.cr_rows :lucky_sheet.cr_columns
+          if(val.type=="delRC"){
+              cur_rc.splice(val.ctrlValue.index,val.ctrlValue.len)            
+          }
+          if(val.type=="addRC"){            
+              cur_rc.splice(val.ctrlValue.index + (val.ctrlValue.direction=="lefttop"?0:1), 0, ...Array(val.ctrlValue.len).fill({_hidden:''}));
+          }
+          
           for(let row=0;row<val.curData.length;row++){
             for(let col=0;col<val.curData[row].length;col++){
               let cell=val.curData[row][col]
@@ -929,6 +982,7 @@ export default {
                   continue
                 let old_cell=curData[r-this.rangePaste_val.row][c-this.rangePaste_val.column]
                 cell.cr=JSON.parse(JSON.stringify(old_cell.cr))
+                cell.v=cell.m=cell.cr._valueExpr
                 _inner_add_del(cell,this.rangePaste_val)   
               }
             }
@@ -950,8 +1004,9 @@ export default {
                 if(cell.v==undefined && cell.mc!=undefined && cell.mc.cs==undefined)//不处理合并单元格
                   continue
                 if(!cell.cr) cell.cr={"_displayValueExpr":"=@value"}
-                if(!cell.cr['_displayValueExpr'])
+                if(cell.cr['_displayValueExpr']==undefined)
                   cell.cr['_displayValueExpr']="=@value"
+                
                 if(cell.bg && !cell.cr['_background-color']?.startsWith("=") && !from_cull_cell_cr) 
                   cell.cr["_background-color"]=cell.bg
                 if(cell.fc && !cell.cr['_color']?.startsWith("=") && !from_cull_cell_cr) 
@@ -972,14 +1027,30 @@ export default {
                 if(!cell.cr._extendDirection && typeof v=='string' && v.search("^=.*(select|group)")>=0)
                   cell.cr._extendDirection="row"
                 let cellCopy=JSON.parse(JSON.stringify(cell))  //$.extend(true,{},cell)
+
+                if(cell && cell.ct && cell.ct.t=='inlineStr' ){
+                  cell.v=cell.m=value
+                  cell.ct.t='g'
+                  cell.ct.fa="General"
+                  delete cell.ct.s
+                }
+                if(cell && cell.ff==undefined)
+                  cell.ff=this.report.defaultsetting["FONT"]
+                if(cell && cell.fs==undefined)
+                  cell.fs=this.report.defaultsetting["FONT-SIZE"]
+                if(cell && cell.fc==undefined)
+                  cell.fc=this.report.defaultsetting["COLOR"]
+                if(cell && cell.bg==undefined)
+                  cell.bg=this.report.defaultsetting["BACKGROUND-COLOR"]
                 cacheCells.push({r,c,cellCopy})
               }
             }
           }
         })
-        cacheCells.forEach(one=>{
-          this.sheet_window.luckysheet.setCellValue(one.r,one.c,one.cellCopy);  
-        })
+        
+        //cacheCells.forEach(one=>{
+        //  this.sheet_window.luckysheet.setCellValue(one.r,one.c,one.cellCopy);  
+        //})
         if(cacheCells.length>0 && val?.type!="datachange"){//数据修改后，已经正确设置了
           this.can_watch_cell=false//切换单元格后，对cur_cell.cr的第一次监控 ，不需要监控
           this.cur_cell=cacheCells[0].cellCopy
@@ -1003,7 +1074,7 @@ export default {
              _this.setCellFromAPI = false; //状态重置
             return
           }
-            _this.sheet_window.luckysheet.refresh()    
+            _this.sheet_window.luckysheet.refresh()
             setTimeout(()=>{
               _this.setCellFromAPI = false; //状态重置
             })
@@ -1011,7 +1082,6 @@ export default {
     },
     preview_run(){
       this.save_fix()
-      this.save_layout(this.layout_mode)
       this.preview_dialogVisible=true
       
     },
@@ -1036,14 +1106,13 @@ export default {
     },
     save_report(){
       this.save_fix()
-      this.save_layout(this.layout_mode)
       let _this=this
       if(this.report.reportName.split(":")[1].startsWith("大屏/")){
         this.setSelectWidgetForLayout();
         setTimeout(()=>{
           html2canvas(document.getElementById('cr_gridLayout'), {
-            width: _this.report.defaultsetting.screen_width*_this.big_screen_scale/100, // canvas宽度
-            height: _this.report.defaultsetting.screen_height*_this.big_screen_scale/100, // canvas高度
+            width: _this.report.defaultsetting.screen_width*_this.scale.v/100, // canvas宽度
+            height: _this.report.defaultsetting.screen_height*_this.scale.v/100, // canvas高度
             //scale:2,
             //dpi:300,
             foreignObjectRendering: true, // 是否在浏览器支持的情况下使用ForeignObject渲染
@@ -1071,11 +1140,12 @@ export default {
       save_one(this.report)
       //console.info(x2jsone.js2xml({report:this.report}))
     },
-    run_report(url){
+    async run_report(url){
       // console.log(url)
       this.save_fix()
-      this.save_layout(this.layout_mode)
       save_one(this.report)
+      if(navigator?.clipboard && navigator.clipboard.writeText)
+        await navigator.clipboard.writeText(url)
       let newA = document.createElement('a');
       newA.target = '_blank';
       newA.href = url;
@@ -1138,9 +1208,22 @@ export default {
           break
         }
       }
-      if(this.cur_layout_item==null)
+      if(this.cur_layout_item==null){
         this.$set(this,'cur_layout_item',{type:'layout',config:this.report.defaultsetting})
+      }
       this.cur_select_type='widget'
+    },
+    "colrow_obj": {
+        handler(val,oldVal)
+        {
+          if(this.selectWidget.type=='cr_row' || this.selectWidget.type=='cr_col'){
+            Object.assign(this.selectWidget.data,this.colrow_obj)
+            let grid= this.report.AllGrids.grid.find(a=>a._name==this.sheet_window.gridName)
+            let aaa=luckySheet2ReportGrid( this.sheet_window,this.report.defaultsetting)
+            
+            $.extend(grid,aaa.grid);
+          }
+        },deep:true
     },
 //======================
 
@@ -1187,7 +1270,8 @@ export default {
            this.test_and_refresh()
            return
         }
-        this.lucky_updated({range:this.cur_sheet.luckysheet_select_save,...cacheUpdate },true) 
+        if(cacheUpdate.length>0)
+          this.lucky_updated({range:this.cur_sheet.luckysheet_select_save,...cacheUpdate },true) 
       },
       deep:true,immediate: true
     }

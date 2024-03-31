@@ -67,7 +67,8 @@
           </div>
         </div>
     </div>
-    <el-table v-else :data="grp.tableData.children"
+    <el-table v-else  
+        :data="grp.tableData.children"  
         style="width: 100%;margin-bottom: 20px;"
         row-key="FullPathFileName" :height="'90%'"
         border @cell-click="row_click"
@@ -98,6 +99,14 @@
         <el-table-column  prop="Length" sortable label="Length" :width="100"/>
 
     </el-table>
+    <!--
+    <el-pagination     .slice((currentPage - 1) * pageSize, currentPage*pageSize)
+        :current-page.sync="currentPage"
+        :page-sizes="[20, 50, 100, 200]"
+        :page-size.sync="pageSize"
+        layout="total, sizes, prev, pager, next, jumper"
+        :total.sync="grp.tableData.children.length">
+    </el-pagination> -->
   </div>
   </el-tab-pane>
   <templateManger v-if="template_dialog_visible" @submit="template_handleSubmit"
@@ -111,13 +120,12 @@
 
 <script>
 import {rptList,rptGrpList,save_one,open_template,save_template,exec_cmd} from "./api/report_api"
-import  codemirror  from './element/vue-codemirror.vue'
 import templateManger from "./templateManger.vue"
 import { baseUrl } from '@/config/env'; 
 import x2js from 'x2js' 
 const x2jsone=new x2js(); //实例
 export default {
-    components: {codemirror,templateManger},
+    components: {templateManger},
     async mounted(){
         let _this=this
         let result=await rptGrpList()
@@ -154,7 +162,9 @@ export default {
             template_xml:{},
             parent_defaultsetting:{},
             search_file_name:"",
-            cur_pre_copy_file:""
+            cur_pre_copy_file:"",
+            currentPage:1,
+            pageSize:20,
         }
     },
     watch:{
@@ -280,7 +290,7 @@ export default {
                 confirmButtonText: '确定',
                 cancelButtonText: '取消',
                 inputPattern:['目录','统计报表'].includes(command)?  /^[a-zA-Z_0-9\u4e00-\u9fa5]*$/ : /.*/,
-                inputValue:"ds"
+                inputValue:command=='定位'?'':"ds"
             })
             .then( async ({ value }) => {
                 if(command=="目录"){
@@ -329,7 +339,10 @@ export default {
                         save_one({reportName:reportName,
                                     dataSets:{dataSet:[]}
                                     ,params:{param:[]}
-                                    ,AllGrids:{grid:[{_name:"main",_title:"main" }]}
+                                    ,AllGrids:{grid:[{_name:"main",_title:"main" ,
+                                    rows:{row:Enumerable.range(1,10).select(x=> {return {_name:x,_height:25,_fixed:"True"}}).toArray()},
+                                    columns:{column:Enumerable.range(0,10).select(x=> {return {_name:'abcdefghijklmn'[x],_width:75,_fixed:"False"}}).toArray()}
+                                }]}
                             })
                     }
                     //this.cur_grp.loc_path.push(row.FileName)

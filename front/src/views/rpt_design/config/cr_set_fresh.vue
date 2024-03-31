@@ -7,7 +7,11 @@
             {{item}}
             </el-checkbox-button>
         </el-checkbox-group>
+        <el-form-item label="同步报表Form">
+        <el-switch v-model="data.force_sync_param"></el-switch>
+        </el-form-item>
         <div>用以下参数刷新</div>
+        
         <el-table stripe border  :height="250" 
                 :data="data.fresh_params"  
             >
@@ -34,7 +38,11 @@
 export default {
     inject: ["context"],
     props: ['data'],
+    name:'cr_set_fresh',
     methods:{ 
+    },
+    mounted(){
+       
     },
     watch:{
         'data.fresh_ds'(){
@@ -59,6 +67,7 @@ export default {
     },
     computed:{
         param_choose_data(){
+            
             let ret=[]
             this.context.report.params.param?.filter(x=>x._inner=='False').forEach(x=>{
                 ret.push("原始参数:"+x._name)

@@ -166,6 +166,9 @@
           <el-form-item label="字体颜色">
             <avue-input-color v-model="data.option.tipColor"></avue-input-color>
           </el-form-item>
+          <el-form-item label="背景颜色">
+            <avue-input-color v-model="data.option.tipBackgroundColor"></avue-input-color>
+          </el-form-item>
           <el-form-item label="提示语格式">
             <avue-input v-model="data.option.labelFormatter"/>
           </el-form-item>
@@ -345,17 +348,6 @@
         </el-collapse-item>
       </template>
     </el-collapse>
-   <!--
-    <template v-if="false && VisualDesign&& VisualDesign.content.trim()!=''">
-    <span class="guide"  v-if="VisualDesign.helpurl">
-        <i class="el-icon-warning-outline" title="查看文档" @click="clickGuide">查看文档</i>
-      </span>
-
-      <dyncTemplate :parentCompent="parentCompent" 
-              :self="{type:'pc_form',content:VisualDesign.content,gridName:'pc_form'}" 
-      >
-      </dyncTemplate>
-    </template> -->
   </div>
 </template>
 
@@ -384,6 +376,7 @@ export default {
       dicOption: dicOption,
       colorOption: colorOption,
       backUrl:"https://data.bladex.vip/blade-visual",
+      default_map_url: window.cellreport.map_url??'https://geo.datav.aliyun.com/areas_v3/bound',
       regionData: regionData,
       edit_item:{}
     };
@@ -411,14 +404,14 @@ export default {
     },
     changeMapLevel(p) {
       if (p.value === "国家") {
-        this.data.option.mapData = `https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json`;
+        this.data.option.mapData = `${this.default_map_url}/100000_full.json`;
       }
     },
     //https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json
     //https://geo.datav.aliyun.com/areas_v3/bound/410800_full.json
     changeProvince({value}) {
       if (value) {
-        this.data.option.mapData = `https://geo.datav.aliyun.com/areas_v3/bound/${value}_full.json`
+        this.data.option.mapData = `${this.default_map_url}/${value}_full.json`
         //`${
         //  this.backUrl
         //}/map/data/${value}?name=${this.getLastRegion([value])}`;
@@ -429,7 +422,7 @@ export default {
         const name = this.getLastRegion(arr);
         const code = arr[arr.length - 1];
         //this.data.option.mapData = `${this.backUrl}/map/data/${code}?name=${name}`;
-        this.data.option.mapData = `https://geo.datav.aliyun.com/areas_v3/bound/${code}_full.json`
+        this.data.option.mapData = `${this.default_map_url}/${code}_full.json`
       }
     },
     /**

@@ -1,8 +1,8 @@
 import x2js from 'x2js' 
-import loading from "@/util/loading"
 const x2jsone=new x2js(); //实例
-import {request} from 'axios'
-import {load_css_js} from '../utils/util'
+import loading from "@/util/loading"
+import axios, {request} from 'axios'
+let tool=require('../utils/util.js')
 let baseUrl=""
 //import { baseUrl } from '@/config/env'; 
 export { baseUrl}
@@ -14,6 +14,8 @@ export function open_template(grpId,path) {
         withCredentials: true
   })
 }
+
+
 export function save_template(grpId,path,content) {
     let data=new FormData();
     
@@ -35,7 +37,7 @@ export function get_pdf(report_obj,paperSetting) {
     if(window.location.pathname.endsWith("run.html"))
         run_url=`${baseUrl}/report5/pdf`
     else
-        run_url=`${baseUrl}/pdf`
+        run_url=`pdf`
     return request({
         headers: {
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -65,9 +67,11 @@ export function open_one(reportName,zb_dict,zb_param) {
         withCredentials: true
   })
 }
-export function test_expr(expr) {
+export function test_expr(expr,line,column) {
     let data=new FormData();
     data.append('expr',expr)
+    data.append('line',line)
+    data.append('column',column)
     return request({
         method: 'post',data,
         url: `${baseUrl}/design/test_expr`,       
@@ -93,7 +97,12 @@ export function save_one(report,zb_data,imgFile) {
     let arr=report.reportName.split(":")
     let grpId=arr[0]
     let reportFilePath=arr[1]
+    report.dataSets?.dataSet?.forEach(x=>
+        {if(x.__text)
+            x.__text=x.__text.replaceAll("\r","")
+        })
     let data=new FormData();
+    //x2jsone.xml2js(x2jsone.js2xml( {a:'sfsdfsdf\r\nasd'} ))
     data.append('reportName',reportFilePath)
     data.append('content',x2jsone.js2xml({report}))
     if(imgFile)
@@ -181,33 +190,43 @@ export async function preview_one(_this,createFormParam=false,param_name=null) {
     }
     signalR_connection.invoke('GetConnectionId').then(function(connectionId){
         let data=new FormData();
-        console.info(_this.context.report)
-        data.append("_content", x2jsone.js2xml({report:_this.context.report}) )
         data.append("_connectionId", connectionId)
+        data.append("_content", x2jsone.js2xml({report:_this.context.report}) )
         data.append("reportName", _this.context.report.reportName)
         data.append("_createFormParam", createFormParam??false)
         if(param_name!=null)
             data.append("_param_name_", param_name)
         Object.entries(_this.queryForm).forEach(kv=>{
-            data.append(kv[0], kv[1])    
+            data.append(kv[0], kv[1]??'')    
         })
+        let _fresh_ds=_this.queryForm._fresh_ds
         request({
         method: 'post',
         url: `${baseUrl}/design/preview${_this.grpId==0?"":":"+_this.grpId}`,
         data
         ,withCredentials: true,noloading:true
         }).then(response_data => {
-            
+            delete _this.queryForm._fresh_ds
+            delete _this.queryForm._cur_page_num_
+            delete _this.queryForm._page_size_
+            if(typeof(response_data)=='string')
+            {
+                _this.$notify({title: '提示',message: response_data,duration: 0});               
+                return;
+            }
             if(response_data.errcode==1){
                 _this.$notify({title: '提示',message: response_data.message,type: 'error',duration:0});
                 return
             }
             _this.$set(_this,'previewFormParam',response_data)            
             Object.assign(_this.result,response_data)
-            console.info( _this.result)
+            //console.info( _this.result)
+            _this.result.fresh_dataset=Enumerable.from( Object.keys(response_data.dataSet??{})).select(x=>"数据集:"+x).toArray()
+            _this.result.fresh_report=Enumerable.from( Object.keys(response_data.data??{})).select(x=>"表格:"+x).toArray()
+    
             response_data.form.forEach(ele=>{
                 let val=ele.value
-                if(ele.data_type=='date')
+                if(ele.data_type=='date' && val!="")
                     val=new Date(ele.value).format("yyyy-MM-dd")
                 _this.$set(_this.queryForm,ele.name,val)
                 _this.$set(_this.queryForm_show,ele.name,false)
@@ -224,7 +243,13 @@ export async function preview_one(_this,createFormParam=false,param_name=null) {
                 _this.context.report_result.form=_this.result.form
             }
             else{
-                Object.assign(_this.context.report_result,_this.result)
+                if(_fresh_ds){
+                    Object.assign(_this.context.report_result.dataSet,response_data.dataSet)
+                    Object.assign(_this.context.report_result.data,response_data.data)
+                }
+                else
+                    Object.assign(_this.context.report_result,_this.result)
+
                 _this.context.report.dataSets.dataSet.forEach(element => {
                     let define_ds= _this.context.report_result.dataSet[element._name]               
                     if(define_ds)
@@ -250,7 +275,7 @@ export async function preview_one(_this,createFormParam=false,param_name=null) {
             }
             _this.executed =true
             _this.showLog=false
-            if(createFormParam)
+            if(createFormParam || _fresh_ds)
                 return
             if(_this.context.report_result.layout)
             {
@@ -263,7 +288,10 @@ export async function preview_one(_this,createFormParam=false,param_name=null) {
                     grid:Object.values(_this.result.data).filter(ele=>ele.type=="common")
                     } )
             }
-            _this.last_js_cript=load_css_js(_this.context.report_result.footer2,"report_back_css")
+            Object.keys(window.cellreport).forEach(x=>{
+                if(x.startsWith("cr_click")) delete window.cellreport[x]
+            })
+            _this.last_js_cript=tool.load_css_js(_this.context.report_result.footer2,"report_back_css")
             eval("(function(){\n"+_this.last_js_cript+"\n})()")
             Object.entries(_this.context.clickedEle).forEach(kv=>{
                 if(kv[1].self.content){
@@ -281,17 +309,53 @@ export async function preview_one(_this,createFormParam=false,param_name=null) {
         _this.$notify({title: '提示',message: error,type: 'error',duration:0});
     })
 }
+export function run_download(_this,file_name="",needType="excel") {
+    let loading_conf={type: 'loading',options: {fullscreen: true,lock: true,text: '正在生成文件，请稍候...',spinner: 'el-icon-loading',background: 'rgba(0, 0, 0, 0.8)'}}
+    let data=new FormData();
+    Object.entries({..._this.queryForm,reportName:_this.reportName}).forEach(kv=>{
+        data.append(kv[0], kv[1]??'')    
+    })
+    if(window.location.pathname.endsWith("run.html"))
+        _this.in_exec_url.run_url=`${baseUrl}/report5/run${_this.grpId==0?"":":"+_this.grpId}?`+_this.queryPara
+    else
+        _this.in_exec_url.run_url=window.location.href
+    loading.show(loading_conf)
+    request({
+        method: 'post',
+        url:_this.in_exec_url.run_url,
+        data,headers:{needType},
+        withCredentials: true
+      }).then(response => {
+        console.info(response)
+        const url = _this.in_exec_url.run_url.split("?")[0]+"/"+response.url;
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', file_name??"filename.xlsx");
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        loading.hide(loading_conf)
+    })
+    .catch(error => {
+        _this.$notify({title: '文件下载失败：',message: error,duration: 0});
+        loading.hide(loading_conf)
+    });        
+}
 const conf_loading_conf={type: 'loading',options: {fullscreen: true,lock: true,text: '正在载入...',spinner: 'el-icon-loading',background: 'rgba(0, 0, 0, 0.8)'}}
-export function run_one(_this,reportFilePath,_param_name_=null,loading_conf=null) {
+export function run_one(_this,reportFilePath,_param_name_=null,loading_conf=null,needType="json") {
     if(loading_conf==null)
         loading_conf=conf_loading_conf
     let data=new FormData();
     Object.entries(_this.queryForm).forEach(kv=>{
-        data.append(kv[0], kv[1])    
+        data.append(kv[0], kv[1]??'')    
     })
     let _fresh_ds=_this.queryForm._fresh_ds
-    loading.show(loading_conf)
+    let stage="开始"
     data.append("reportName", reportFilePath)
+    data.append("_createFormParam", window.cellreport.exec_num==0)
+    window.cellreport.exec_num++
     if(_param_name_!=null)
         data.append("_param_name_", _param_name_)
     let url
@@ -299,11 +363,12 @@ export function run_one(_this,reportFilePath,_param_name_=null,loading_conf=null
         _this.in_exec_url.run_url=`${baseUrl}/report5/run${_this.grpId==0?"":":"+_this.grpId}?`+_this.queryPara
     else
         _this.in_exec_url.run_url=window.location.href
+    loading.show(loading_conf)
     request({
       method: 'post',
       url:_this.in_exec_url.run_url,
-      data
-      ,withCredentials: true
+      data,
+      withCredentials: true
     }).then(response_data => {
         if(_this.reportName!=reportFilePath){
             for(let k in _this.queryForm)
@@ -313,25 +378,44 @@ export function run_one(_this,reportFilePath,_param_name_=null,loading_conf=null
             _this.allElementSet.clear()
         }
         delete _this.queryForm._fresh_ds
+        delete _this.queryForm._cur_page_num_
+        delete _this.queryForm._page_size_
         _this.executed =true
+        stage="获取数据完成"
+        if(typeof(response_data)=='string')
+        {
+            try{
+                response_data=JSON.parse( response_data.substring( response_data.indexOf('{"errcode"')) )
+            }catch{
+                _this.$notify({title: '提示',message: response_data,duration: 0});
+                loading.hide(loading_conf)
+                return;
+            }
+        }
         if(response_data.errcode && response_data.errcode ==1){
-        _this.$notify({title: '提示',message: response_data.message,duration: 0});
-        return;
+            loading.hide(loading_conf)
+            if(tool.getObjType(_this.$alert)=='function')
+                _this.$alert(response_data);
+            else
+                alert(response_data);
+            return;
         }
         if(response_data.zb_var) //兼容老写法
             response_data._zb_var_=response_data.zb_var
-        if(response_data._zb_var_.watermark){
+        if(response_data._zb_var_ && response_data._zb_var_.watermark){
             $(".mask_div").remove()
             _this.watermark(response_data._zb_var_.watermark);
         }
+        stage="步骤1"
         response_data.form.forEach(ele=>{
             let val=ele.value
-            if(ele.data_type=='date')
+            if(ele.data_type=='date' && val!="")
                 val=new Date(ele.value).format("yyyy-MM-dd")
             _this.$set(_this.queryForm,ele.name,val)
             _this.$set(_this.queryForm_show,ele.name,false)
         })
-        
+        _this.result.fresh_dataset=Enumerable.from( Object.keys(response_data.dataSet??{})).select(x=>"数据集:"+x).toArray()
+        _this.result.fresh_report=Enumerable.from( Object.keys(response_data.data??{})).select(x=>"表格:"+x).toArray()
         if(_param_name_!=null){
             _this.result.dataSet=response_data.dataSet
             _this.result.form=response_data.form
@@ -339,19 +423,23 @@ export function run_one(_this,reportFilePath,_param_name_=null,loading_conf=null
             return
         }
         else if(_fresh_ds){
-            Object.assign(_this.result.dataSet,response_data.dataSet)
-            Object.assign(_this.result.data,response_data.data)
-            //_this.result.fresh_report=Object.keys( response_data.data??{})
-            //_this.result.fresh_dataset=Object.keys( response_data.dataSet??{})
+            Object.keys(response_data.dataSet??{}).forEach(x=>{
+                _this.result.dataSet[x]=response_data.dataSet[x]
+            })
+            Object.keys(response_data.data??{}).forEach(x=>{
+                _this.result.data[x]=response_data.data[x]
+            })
+            //Object.assign(_this.result.dataSet,response_data.dataSet)
+            //Object.assign(_this.result.data,response_data.data)
         }
         else{
             Object.assign(_this.result,response_data)
-            //_this.result.fresh_report=Object.keys( response_data.data??{})
-            //_this.result.fresh_dataset=Object.keys( response_data.dataSet??{})
         }
-        _this.last_js_cript=load_css_js(_this.result.footer2,"report_back_css")
+        stage="步骤2"
+        _this.last_js_cript=tool.load_css_js(_this.result.footer2,"report_back_css")
+        //let tool=require('../utils/util.js')
         eval("(function(){\n"+_this.last_js_cript+"\n})()")
-        _this.setTimeout_function=eval("(function(){\n return "+_this.setTimeout_function.toString()+"\n})()")
+        //_this.setTimeout_function=eval("(function(){\n return "+_this.setTimeout_function?.toString()+"\n})()")
         if(_fresh_ds){
             loading.hide(loading_conf)
             return  
@@ -359,93 +447,150 @@ export function run_one(_this,reportFilePath,_param_name_=null,loading_conf=null
             
         if(_this.result.layout)
         {
-            _this.layout=_this.result.layout
+            _this.layout.v=_this.result.layout
         }
         else
         {
-            _this.layout=build_layout(
+            _this.layout.v=build_layout(
                 { HtmlText:Object.values(_this.result.data).filter(ele=>ele.type=="htmlText"),
                 grid:Object.values(_this.result.data).filter(ele=>["common",'large'].includes( ele.type))
                 } )
         }
-        
+        stage="步骤3"
         //手机端列表头转按钮
-        if( window.convert_col_to_button &&
-            _this.layout.length==1 && _this.layout[0].element.children.column.length==1 
-            && _this.layout[0].element.children.column[0].type=="luckySheetProxy"
-            && Object.keys(_this.result.data).length==1
-            && _this.result.data[_this.layout[0].element.children.column[0].gridName].optimize)
-        {
-            let grid_result=_this.result.data[_this.layout[0].element.children.column[0].gridName]
-            let all_t_arr=[]
-            for(let line_idx=grid_result.colName_lines[0];line_idx<grid_result.colName_lines[1];line_idx++){
-                let start_str,start_col=Number.parseInt(grid_result.fix_cols)
-                let t_arr=[]
-                all_t_arr.push(t_arr)
-                for(let col_idx=Number.parseInt(grid_result.fix_cols);col_idx<grid_result.tableData[line_idx].length;col_idx++)
-                {
-                    if(start_str ==undefined)
-                        start_str=grid_result.tableData[line_idx][col_idx]
-                    else if(start_str!=grid_result.tableData[line_idx][col_idx]){
-                        t_arr.push({'txt':start_str,col_span:[start_col,col_idx-1],arr:[]})
-                        start_str=grid_result.tableData[line_idx][col_idx]
-                        start_col=col_idx
-                    }
-                }
+        if( (window.convert_col_to_button || window.cellreport.convert_col_to_button) && _this.layout.v.length==1 && Object.keys(_this.result.data).length==1)
+        { 
+            let grid_result
+            if( _this.layout.v[0].element.children && _this.layout.v[0].element.children.column.length==1 
+                && _this.layout.v[0].element.children.column[0].type=="luckySheetProxy"
+                && _this.result.data[_this.layout.v[0].element.children.column[0].gridName].optimize)
+            {
+                grid_result=_this.result.data[_this.layout.v[0].element.children.column[0].gridName]
             }
-            let col_vaild=(all_t_arr.length>0)
-            for(let idx=all_t_arr.length-1;idx>0;idx--) {
-                if(idx==0)
-                break
-                let parent_idx=0
-                for(let i=0;i<all_t_arr[idx].length;i++)
-                {
-                    let parent_col_span=all_t_arr[idx-1][parent_idx].col_span
-                    let cur_span=all_t_arr[idx][i].col_span
-                    if(cur_span[0]>=parent_col_span[0] && cur_span[1]<=parent_col_span[1])
-                    {
-                        all_t_arr[idx-1][parent_idx].arr.push(all_t_arr[idx][i])
-                        continue
+            else if(_this.layout.v[0].element.type=="luckySheetProxy" && _this.result.data[_this.layout.v[0].element.gridName].optimize){
+                grid_result=_this.result.data[_this.layout.v[0].element.gridName]
+            }
+
+            if(grid_result){
+                let all_t_arr=[]
+                for(let line_idx=grid_result.colName_lines[0];line_idx<grid_result.colName_lines[1];line_idx++){
+                    let start_str,start_col=Number.parseInt(grid_result.fix_cols)
+                    if(start_col<0) {
+                        start_col=1
+                        grid_result.fix_cols="1"
                     }
-                    if(cur_span[0]<parent_col_span[0]){
-                        col_vaild=false
-                        break
+                    let t_arr=[]
+                    all_t_arr.push(t_arr)
+                    for(let col_idx=Number.parseInt(grid_result.fix_cols);col_idx<grid_result.tableData[line_idx].length;col_idx++)
+                    {//从当前行的固定列开始，按 单元格值 进行分段 存储。存放内容：当前段的内容，起始列和终止列，以及一个空数组
+                        if(start_str ==undefined)
+                            start_str=grid_result.tableData[line_idx][col_idx]
+                        else if(start_str!=grid_result.tableData[line_idx][col_idx]){
+                            t_arr.push({'txt':start_str,col_span:[start_col,col_idx-1],arr:[]})
+                            start_str=grid_result.tableData[line_idx][col_idx]
+                            start_col=col_idx
+                        }
                     }
-                    i--
-                    parent_idx++
                 }
-                if(col_vaild==false)
+                let col_vaild=(all_t_arr.length>0)
+                for(let idx=all_t_arr.length-1;idx>0;idx--) {
+                    if(idx==0)
                     break
-            }
-            if(col_vaild ){
-                _this.mobile_col_arr=all_t_arr[0]
-                _this.mobile_col_button_arr=[ {selected:0,arr:_this.mobile_col_arr}]  
-                for(let idx=0;;idx++){
-                    if(_this.mobile_col_button_arr[idx].arr[0].arr.length>0)
-                        _this.click_col_button(idx,0)
-                    else
+                    let parent_idx=0
+                    for(let i=0;i<all_t_arr[idx].length;i++)
+                    {
+                        if(all_t_arr[idx-1][parent_idx]==undefined){
+                            col_vaild=false
+                            break
+                        }
+                        let parent_col_span=all_t_arr[idx-1][parent_idx].col_span
+                        let cur_span=all_t_arr[idx][i].col_span
+                        if(cur_span[0]<parent_col_span[0]){//下级和上级有交叉，就不能转换
+                            col_vaild=false
+                            break
+                        }
+                        //else if(cur_span[0]==parent_col_span[0] && cur_span[1]==parent_col_span[1] && all_t_arr.length==idx+1){
+                        //    continue// 如果现在是最后一行，并且下级和上级的列完全一样，就跳过去。
+                        //}
+                        else if(cur_span[0]>=parent_col_span[0] && cur_span[1]<=parent_col_span[1])
+                        {//下级分组能被上级分组完全包含，就加入上级分组的arr里面
+                            all_t_arr[idx-1][parent_idx].arr.push(all_t_arr[idx][i])
+                            continue
+                        }
+                        i--
+                        parent_idx++
+                    }
+                    if(col_vaild==false)
                         break
                 }
-                grid_result.mobile_col_button_arr=_this.mobile_col_button_arr
+                if(col_vaild ){
+                    _this.mobile_col_arr=all_t_arr[0]
+                    for(let idx=0;idx<_this.mobile_col_arr.length;idx++)
+                    {
+                        deepTree(_this.mobile_col_arr[idx],null)
+                    } 
+                    _this.mobile_col_button_arr=[ {selected:0,arr:_this.mobile_col_arr}]  
+                    
+                    for(let line_idx=0;;line_idx++){
+                        let cur_item=_this.mobile_col_button_arr[line_idx]
+                        if( cur_item.arr[0].arr.length>0){
+                            _this.mobile_col_button_arr.push({selected:0,arr:_this.mobile_col_button_arr[line_idx].arr[0].arr })
+                        }
+                        else
+                            break
+                    }
+                    let last_item=Enumerable.from(_this.mobile_col_button_arr).last()
+                    if(last_item.arr.length>0 && last_item.arr[0].col_span[0]==last_item.arr[0].col_span[1])
+                    {
+                    if(Enumerable.from(_this.mobile_col_button_arr).all(x=>x.selected==0) && last_item.arr.length>1)
+                        last_item.selected=1
+                    }
+                    grid_result.mobile_col_button_arr=_this.mobile_col_button_arr
+                }
             }
         }
-        
-
-        _this.isShow=false
-        setTimeout(() => {
-            _this.isShow=true
+        stage="步骤4"
+        //_this.isShow=false
+        //setTimeout(() => {
+        //    _this.isShow=true
             _this.refresh_layout(null,_this)
-            
             loading.hide(loading_conf)
-            
-        });
+            stage="完成"
+        //});
     }).catch(error=> {
         loading.hide(loading_conf) 
-        _this.$notify({title: '提示',message: error,type: 'error',duration:0});
+        //console.error(error)
+        //let err_txt=error.response.data?.message||error.response.statusText
+        _this.$alert(stage+"."+error.toString());
     })
     
 }
-
+function deepTree(cur_item,parent_item){
+    for(let idx=0;idx<cur_item.arr.length;idx++)
+    {
+        deepTree(cur_item.arr[idx],cur_item)
+    }
+    if( cur_item.arr.length==0 && parent_item && parent_item.arr.length==1 && cur_item.txt==parent_item.txt){
+        if(cur_item.col_span[0]==parent_item.col_span[0] && cur_item.col_span[1]==parent_item.col_span[1]  ){
+            parent_item.arr=[]
+            // 如果现在是最后一行，并且下级和上级的列完全一样，就跳过去。
+            return
+        }
+    }
+    if(parent_item==null)   
+        return
+    let can_del=true
+    for(let i=0;i<parent_item.arr.length;i++){
+        let x=parent_item.arr[i]
+        if(x.col_span[0]!=x.col_span[1] || x.arr.length!=0){
+            can_del=false
+            break
+        }
+    }
+    if(can_del){
+     parent_item.arr=[]
+    }
+}
 export function rptList(grpId,loc_path) {
     return request({
         method: 'get',
@@ -479,22 +624,22 @@ export function exec_cmd(cmd,from,to) {
 export function grp_list() {
     return request({
         method: 'get',
-        url: `${baseUrl}/api/Rpt_group` ,        
+        url: `${baseUrl}/Rpt_group/getList` ,        
         withCredentials: true
     })
 }
 export function grp_save(data) {
     return request({
-        method: 'put',
-        url: `${baseUrl}/api/Rpt_group/${data.id}` ,    
+        method: 'post',
+        url: `${baseUrl}/Rpt_group/PutRpt_group` ,
         data,    
         withCredentials: true
     })
 }
 export function grp_delete(data) {
     return request({
-        method: 'delete',
-        url: `${baseUrl}/api/Rpt_group/${data.id}` ,    
+        method: 'post',
+        url: `${baseUrl}/Rpt_group/DeleteRpt_group?id=${data.id}` ,    
         data,    
         withCredentials: true
     })
@@ -551,3 +696,4 @@ export function getImgFileList(path) {
         withCredentials: true
     })
 }
+

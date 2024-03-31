@@ -40,11 +40,27 @@ export default [
         },  
         
             {"type":"dync_template",'label':'动态模板',gridName:"_random_",icon: 'icon-table','color':'#fff',display: true,style:{height:'100px'}, 
-            'content':`
-        <div>
-        <div>Hello {{ name }}!</div>
-        <button @click="sayHi">Say Hi!</button>
-      </div>`,
+            'content':`<template>
+  <div>Hello {{ self.gridName }}!</div>
+</template>
+
+<script>
+  export default{
+    mounted(){
+    },
+    data(){
+      return {
+        xx:1
+      }
+    },
+    methods:{
+    },
+    watched:{
+    },
+    computed:{
+    }
+  }
+</script>  `,
             'component':'dync-template'},
 
             {type:"ele-grid",'label':'ele_grid',icon: 'icon-table','color':'#fff',display: true, 
@@ -123,13 +139,13 @@ export default [
               return tableData;
       },
       cr_init(){
-          if(this.context.mode=='design' && this.self.datasource!='示例')
-              return true
-          this.$nextTick(() => {
-              let old_default=localStorage.getItem(key) || ''
-              if(!this.validatenull(old_default))
-                  this.defaults = JSON.parse(localStorage.getItem(key) || '')
-          })
+          //if(this.context.mode=='design' && this.self.datasource!='示例')
+          //    return true
+          //this.$nextTick(() => {
+          //    let old_default=localStorage.getItem(key) || ''
+          //    if(!this.validatenull(old_default))
+          //        this.defaults = JSON.parse(localStorage.getItem(key) || '')
+          //})
           return true
       }
   }
@@ -143,7 +159,33 @@ export default [
               type: 'tabs',
               label: 'tab面板',
               icon: 'icon-table',
-              span: 24,
+              span: 24,el_type:'tabs',el_param:{stretch:false,'tab-position':'top',type:'border-card'},
+              display: true,style:{height:'100%'},
+              component:'widget-form-tabs',
+              children: {
+                align: 'center',
+                headerAlign: 'center',
+                column: []
+              }
+            },
+            {
+              type: 'carousel',
+              label: '轮播容器',
+              icon: 'icon-table',gridName:'_random_',
+              span: 24,el_type:'carousel',el_param:{interval:3000,'indicator-position':'none',arrow:'hover',type:'card',direction:'horizontal'},
+              display: true,style:{height:'100%'},
+              component:'widget-form-tabs',
+              children: {
+                align: 'center',
+                headerAlign: 'center',
+                column: []
+              }
+            },
+            {
+              type: 'Collapse',
+              label: '折叠面板',
+              icon: 'icon-table',gridName:'_random_',
+              span: 24,el_type:'Collapse',el_param:{'accordion':true,},
               display: true,style:{height:'100%'},
               component:'widget-form-tabs',
               children: {

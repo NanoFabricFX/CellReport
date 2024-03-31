@@ -1,6 +1,6 @@
 <template>
   <div :style="{width:'100%',height:height||'100%','display':'flex','flex-direction': 'column'}" >
-    <span v-if='TABLEOBJ && TABLEOBJ.param_grid.optimize' style="position: absolute;right: 0px;top: 0px;z-index: 10;"
+    <span v-if='!context.crisMobile && TABLEOBJ && TABLEOBJ.param_grid.optimize' style="position: absolute;right: 0px;top: 0px;z-index: 10;"
      @click="searchDialogVisible=true">
         <img src='img/search.png'>
       </span>
@@ -12,19 +12,19 @@
        <dyncTemplate :parentCompent="parentCompent" :self="{content:context.report_result.pager_template}" >
         </dyncTemplate>
       </div>
-    </template>
+    </template> 
     <template v-else-if="context.report_result.pager_template==undefined && context.mode!='design' && useHtml && gridType=='common'">
       
       <div  :style="{'flex-grow':1,width:'100%','height':'20px'}" v-html="html_table" ref="htmTalbe">        
       </div>
       <el-pagination  v-if="TABLEOBJ!=null" 
         :current-page.sync="cur_page"
-        :page-size.sync="self.page_size" 
-        :page-sizes="JSON.parse(self.page_sizes)"
-        :layout="context.crisMobile?'total, sizes, prev, next':'total, sizes, prev, pager, next, jumper'" 
-        
+        :page-size.sync="self_page_size" 
+        :page-sizes="JSON.parse(self_page_sizes)"
+        :layout="layout" 
         hide-on-single-page
-        :total="TABLEOBJ.total()">
+        :page-count="page_count"
+        :total="total">
       </el-pagination>
       
     </template>
@@ -58,7 +58,9 @@
          <el-form-item label="关系运算符">
         <el-radio-group v-model="relation" placeholder="请选择">
           <el-radio
-            v-for="item in [{label:'等于',value:'=='},{label:'不等于',value:'!='},{label:'大于',value:'>'},{label:'大于等于',value:'>='},{label:'小于',value:'<'},{label:'小于等于',value:'<='},]"
+            v-for="item in [{label:'等于',value:'=='},{label:'不等于',value:'!='},{label:'大于',value:'>'},{label:'大于等于',value:'>='},
+            {label:'小于',value:'<'},{label:'小于等于',value:'<='},{label:'包含',value:'contains'},{label:'开始',value:'start'},{label:'结束',value:'end'},
+            ]"
             :key="item.value"
             :label="item.value"
             :value="item.value">{{item.label}}
@@ -90,14 +92,15 @@
 <script>
 let arrow_right_img=undefined
 let arrow_down_img=undefined
-import dyncTemplate from './dyncTemplate.vue'
-import {designGrid2LuckySheet,numToString,getRangeByText,resultGrid2LuckySheet,output_largeGrid,convert_array_to_json} from '../utils/util.js'
+
+import {designGrid2LuckySheet,numToString,getRangeByText,resultGrid2LuckySheet,output_largeGrid,convert_array_to_json,isMobile} from '../utils/util.js'
 import   ResultGrid2HtmlTable2   from '../utils/resultGrid2HtmlTable.js'
 import mixins from "./mixins"
+
 export default {
  name: "luckySheetProxy",
   mixins:[mixins],
-  components: {dyncTemplate},
+  components: {},
   props: {gridName:String,height:String},
   data(){
     return {
@@ -116,6 +119,10 @@ export default {
       relation:"==",
       target_val:'',
       as_type:"string",
+      self_page_size:-1,
+      self_page_sizes:"[20, 50, 100, 200]",
+      page_count:undefined,
+      total:undefined,
     }
   },
   computed:{
@@ -123,13 +130,23 @@ export default {
     cur_grid(){
       return this.context.report.AllGrids?.grid?.find(a=>a._name==this.gridName)
     },
+    cur_result(){
+      return this.context.report_result.data[this.gridName]
+    },
+    
     datasource(){
       return "表格:"+this.gridName
+    },
+    layout(){
+      if(!this.cur_result.optimize && this.cur_result.row_page_break_set.length>0)
+        return this.context.crisMobile?'  prev, next':' prev, pager, next, jumper'
+      else
+        return this.context.crisMobile?'total, sizes, prev, next':'total, sizes, prev, pager, next, jumper'
     }
   },
   
   watch: {
-    "self.page_sizes"(){
+    self_page_sizes(){
       if(this.$refs.iframe){
         let paperSetting=JSON.parse(this.cur_grid.paperSetting??
         `{"pageSize_name":"A4",
@@ -141,8 +158,7 @@ export default {
                 "margin_right":36}`
         )
 
-        this.$refs.iframe?.contentWindow.jQuery("#luckysheet_paper_width").css('left',
-        `${paperSetting.pageSize_Width - paperSetting.margin_left - paperSetting.margin_right}pt`)
+        this.$refs.iframe?.contentWindow.jQuery("#luckysheet_paper_width").css('left',`${paperSetting.pageSize_Width - paperSetting.margin_left - paperSetting.margin_right}pt`)
         if(paperSetting.print_template_background){
           this.$refs.iframe?.contentWindow.jQuery("#luckysheet_background_img").show()
           this.$refs.iframe?.contentWindow.jQuery("#luckysheet_background_img img").attr("src",paperSetting.print_template_background)
@@ -152,16 +168,25 @@ export default {
       }
     },
     cur_page(){
+      if(this.cur_result.backend_split_page){
+        this.context.queryForm._fresh_ds=JSON.stringify(['表格:'+this.gridName]) 
+        this.context.queryForm._cur_page_num_=this.cur_page
+        this.context.queryForm._page_size_=this.self_page_size
+        this.context.rpt_this.submit()
+        return
+      }
       this.grid_sort_action()
     },
-    "self.page_size"(){
-      if(!this.self.page_sizes){
-        this.self.page_sizes="[20, 50, 100, 200]"
+    self_page_size(newVal,oldVal){
+      if(oldVal==-1)
+        return;
+      if(this.cur_result.backend_split_page){
+        this.context.queryForm._fresh_ds=JSON.stringify(['表格:'+this.gridName]) 
+        this.context.queryForm._cur_page_num_=1
+        this.context.queryForm._page_size_=this.self_page_size
+        this.context.rpt_this.submit()
+        return
       }
-      if(!this.self.page_size){
-        this.self.page_size=20
-      }
-      this.cur_page=1   
       this.grid_sort_action()   
     },
     //"context.report":function(){this.buildDisplayData() },
@@ -182,12 +207,32 @@ export default {
   },
   mounted(){
     let _this=this
-    setTimeout(function(){//如果不加，group中新增报表的时候会导致名字混乱
-      _this.self.gridName=_this.gridName
-      _this.buildDisplayData()
-
-    })
-    
+    if(this.context.mode!='design'){      
+      _this.self_page_sizes=_this.self.page_sizes
+      if(!_this.cur_result.optimize)
+      {
+        _this.self_page_size=_this.cur_result.tableData.length
+        if(_this.cur_result.row_page_break_set.length>0)
+        _this.page_count=_this.cur_result.row_page_break_set.length
+      }else{
+        _this.self_page_size=_this.self.page_size
+      }
+      if(!_this.self_page_sizes){
+        _this.self_page_sizes="[20, 50, 100, 200]"
+      }
+      
+      if(_this.cur_result.backend_split_page){
+        //this.cur_page=this.cur_result.cur_page??1
+        //this.self.page_size=this.cur_result.page_size??20
+      }
+    }
+    //else
+    {
+      setTimeout(function(){//如果不加，group中新增报表的时候会导致名字混乱
+        _this.self.gridName=_this.gridName
+        _this.buildDisplayData()
+      })
+    }
   },
   beforeDestroy(){
     let idx=this.context.all_sheet_windows.indexOf(this)
@@ -263,10 +308,11 @@ export default {
               sortArr?.off('click',this.sortFunc)
           }
           if(this.TABLEOBJ==null)
-            this.$set(this,'TABLEOBJ',new ResultGrid2HtmlTable2(cur_grid,this.$el,this.self,_this.context.report_result.footer2,_this.context.report_result.defaultsetting))
-          this.pager_height=this.TABLEOBJ!=undefined && (parseInt(this.self.page_size)<=this.TABLEOBJ.total() )?32:0
-          this.html_table=this.TABLEOBJ.show(this.cur_page,this.self.page_size)
-          
+            this.$set(this,'TABLEOBJ',new ResultGrid2HtmlTable2(cur_grid,this.$el,this.self,_this.context.report_result.defaultsetting))
+          this.pager_height=this.TABLEOBJ!=undefined && (parseInt(this.self_page_size)<=this.TABLEOBJ.total() )?32:0
+          this.html_table=this.TABLEOBJ.show(this.cur_result.backend_split_page?1:this.cur_page,this.self_page_size)
+          if(this.cur_result.optimize)
+            this.total= this.cur_result.backend_split_page? this.cur_result.backend_total_line: this.TABLEOBJ.total()   
     
           //test.show(1,20)
           this.$nextTick(x=>{
@@ -288,26 +334,35 @@ export default {
               target.scrollTop=_this.scrollTop
               // 设置表头的行高和主体表的行高一致
               $(`#reportDiv${_this.gridName}Top tr`).each(function() {
-                  let main_td_arr=$(this).find("td")
-                  $.each( $(`#reportDiv${_this.gridName}TopLeft tr[data-n=${this.dataset['n']}]`).find("td")
-                  ,function(i,val){// 每个对应的单元格都设置行高
-                    $(val).height( $(main_td_arr[i]).height() )
-                  })
+                  //if(!this.param_grid.auto_line_height || this.defaultsetting.cr_auto_line_height!='true')
+                  $(`#reportDiv${_this.gridName}TopLeft tr[data-n=${this.dataset['n']}]`).height( $(this).height() )
+                  if(!isMobile())
+                  cur_grid.rowlenArr[this.dataset['n']]=$(this).height() //设置真正行高到原始数组,pdf 生成时就可以使用了
               })
               $(`#reportDiv${_this.gridName} tr`).each(function() {
-                  let main_td_arr=$(this).find("td")
-                  $.each( $(`#reportDiv${_this.gridName}Left tr[data-n=${this.dataset['n']}]`).find("td")
-                  ,function(i,val){
-                    $(val).height( $(main_td_arr[i]).height() )
-                  })
+                  $(`#reportDiv${_this.gridName}Left tr[data-n=${this.dataset['n']}]`).height( $(this).height() )
+                  if(!isMobile())
+                  cur_grid.rowlenArr[this.dataset['n']]=$(this).height() //设置真正行高到原始数组,pdf 生成时就可以使用了
               })
-              
-              //点击，发送数据到clickedEle
-              $(`#reportDiv${_this.gridName} .cr-table__body tr`).unbind()
-              $(`#reportDiv${_this.gridName} .cr-table__body tr`).bind('click',
-                function(evt){
+
+              //$(`#reportDiv${_this.gridName}Top tr`).each(function() {
+              //    let main_td_arr=$(this).find("td")
+              //    $.each( $(`#reportDiv${_this.gridName}TopLeft tr[data-n=${this.dataset['n']}]`).find("td")
+              //    ,function(i,val){// 每个对应的单元格都设置行高
+              //      $(val).height( $(main_td_arr[i]).height() )
+              //    })
+              //})
+              //$(`#reportDiv${_this.gridName} tr`).each(function() {
+              //    let main_td_arr=$(this).find("td")
+              //    $.each( $(`#reportDiv${_this.gridName}Left tr[data-n=${this.dataset['n']}]`).find("td")
+              //    ,function(i,val){
+              //      $(val).height( $(main_td_arr[i]).height() )
+              //    })
+              //})
+              function click_row(evt){
                   let real_row_no=_this.TABLEOBJ.tableData_bridge[$(evt.currentTarget).data("n")]
                   let cur_row=_this.TABLEOBJ.param_grid.tableData[real_row_no]
+                  let cur_col=_this.TABLEOBJ.param_grid.columns[  $(evt.target.parentElement).data("c")]
                   let ret={"KEY":cur_row[cur_row.length-1]}
                   for(let idx=0;idx<cur_row.length-1;idx++){
                     ret[numToString(idx+1)]=cur_row[idx]
@@ -315,23 +370,37 @@ export default {
                 
                   ret=convert_array_to_json([_this.TABLEOBJ.param_grid.columns,cur_row])[0]
                   console.info(ret) 
-                  _this.$set(_this.context.clickedEle,_this.self.gridName,{data:ret,cell:null,column:null,self:_this.self})
+                  _this.$set(_this.context.clickedEle,_this.self.gridName,{data:ret,cell:ret[cur_col],column:cur_col,self:_this.self})
                   _this.click_fresh(_this.context.clickedEle[_this.self.gridName])
+
+                  //if(window[`cr_click_${_this.gridName}`]){
+                  //  window[`cr_click_${_this.gridName}`]({data:ret,cell:ret[cur_col],column:cur_col},_this)
+                  //}
+
                   // 点击后的活动行
-                  $(this).siblings('tr').removeClass('active-row');
-                  $(this).addClass('active-row');
+                  //$(this).siblings('tr').removeClass('active-row');
+                  //$(this).addClass('active-row');
+                  $(`#reportDiv${_this.gridName} tr[data-n=${this.dataset['n']}]`).siblings('tr').removeClass('active-row');
+                  $(`#reportDiv${_this.gridName} tr[data-n=${this.dataset['n']}]`).addClass('active-row');                        
                   $(`#reportDiv${_this.gridName}Left tr[data-n=${this.dataset['n']}]`).siblings('tr').removeClass('active-row');
-                  $(`#reportDiv${_this.gridName}Left tr[data-n=${this.dataset['n']}]`).addClass('active-row');      
-                }
-              )
-              //鼠标悬停
-              $(`#reportDiv${_this.gridName} .cr-table__body tr`).mouseover(function (e) {
-                $(this).siblings('tr').removeClass('hover-row');
-                  $(this).addClass('hover-row');
+                  $(`#reportDiv${_this.gridName}Left tr[data-n=${this.dataset['n']}]`).addClass('active-row');                        
+              }
+              function mouse_over(e) {
+                  //$(this).siblings('tr').removeClass('hover-row');
+                  //$(this).addClass('hover-row');
+                  $(`#reportDiv${_this.gridName} tr[data-n=${this.dataset['n']}]`).siblings('tr').removeClass('hover-row');
+                  $(`#reportDiv${_this.gridName} tr[data-n=${this.dataset['n']}]`).addClass('hover-row'); 
                   $(`#reportDiv${_this.gridName}Left tr[data-n=${this.dataset['n']}]`).siblings('tr').removeClass('hover-row');
                   $(`#reportDiv${_this.gridName}Left tr[data-n=${this.dataset['n']}]`).addClass('hover-row'); 
-              })
-              
+              }
+              //点击，发送数据到clickedEle
+              $(`#reportDiv${_this.gridName} .cr-table__body tr`).unbind()
+              $(`#reportDiv${_this.gridName} .cr-table__body tr`).bind('click',click_row)
+              $(`#reportDiv${_this.gridName}Left .cr-table__body tr`).unbind()
+              $(`#reportDiv${_this.gridName}Left .cr-table__body tr`).bind('click',click_row)
+              //鼠标悬停
+              $(`#reportDiv${_this.gridName} .cr-table__body tr`).mouseover(mouse_over)
+              $(`#reportDiv${_this.gridName}Left .cr-table__body tr`).mouseover(mouse_over)              
               //树折叠展开
               $(`#reportDiv${_this.gridName} span.cr_tree_node`).unbind()
               $(`#reportDiv${_this.gridName} span.cr_tree_node`).click(
@@ -377,7 +446,7 @@ export default {
               this.click_fresh(this.context.clickedEle[this.self.gridName])
           }
     },
-    buildDisplayData(is_run=false)
+    buildDisplayData()
     {
       let _this=this
       if(_this.context.mode=='run' ||( _this.context.mode!='design' && this.useHtml)){
@@ -627,17 +696,23 @@ export default {
             }//end if      
           } 
           function buildReport(){
+              if (String.prototype.replaceAll===undefined){
+                String.prototype.replaceAll = function(s1, s2) {                   
+                  return this.replace(new RegExp(s1, "gm"), s2);
+                }
+              }
+              window.cr_design=true
               luckysheet.create({
                     container: 'report',lang: 'zh',forceCalculation:false,showsheetbar:false,
                     showstatisticBarConfig:{count: false,  view: false,   zoom: false,  },
                     enableAddBackTop:false,enableAddRow:false,sheetFormulaBar:false,
                     showinfobar:false,
                     data:[${sheet_data}],
-                    hook:{rangeSelect:selectChange,                      
+                    hook:{rangeSelect:selectChange,
                       updated:lucky_updated,
                       cellUpdateBefore:cellUpdateBefore,
                       rangePasteBefore:rangePasteBefore,
-                      cellRenderAfter:cellRenderBefore
+                      cellRenderAfter:cellRenderBefore,
                       },
                     ${append}
               })
@@ -666,9 +741,7 @@ export default {
     flex: 1;
     width: 100%;
     max-width: 100%;
-    background-color: #fff;
-    font-size: 14px;
-    color: #606266;
+    
 }
 .cr-table--border {
     border-right: none;

@@ -9,20 +9,14 @@
     <el-tab-pane :label="one.label" :name="one.name" v-for="one in temp_props" 
     :key="one.name"  style="height:100%">
         <!-- <edmitormd v-if="tab_value=='notebook' &&  one.name=='notebook' "  v-model="one.val"/> -->
-        
-        <codemirror v-if="tab_value==one.name  " ref="editor"
-            style="height:100%"
-            v-model="one.val" 
-          :options="{tabSize: 4, mode: one.mode,
-           styleActiveLine: true,lineWrapping: true,
-            theme: 'cobalt',showCursorWhenSelecting: true, cursorBlinkRate:0 }" 
-            @ready="editor_ready(one.name)"
-         />
-        
+        <MonacoEditor  v-if="tab_value==one.name" ref="editor"  theme="vs" v-model="one.val"
+              :language="one.mode"  style="height:100%;border:solid 1px silver;margin-bottom:5px;"
+              :options="{}"  >
+        </MonacoEditor>
+       
     </el-tab-pane>
     <el-tab-pane label='缺省值'>
-        <el-form labelPosition="left" label-suffix="：" :label-position="'right'"
-             labelWidth="100px">
+        <el-form labelPosition="left" label-suffix="："  labelWidth="100px">
             <el-row style="height: 60px;">
                 <el-col :span="6">
             <el-form-item label="字体">
@@ -46,17 +40,26 @@
             </el-col>
              </el-row>
             <el-row style="height: 60px;">
-                <el-col :span="12">
-            <el-form-item label="显示form">
-                <el-radio v-model="tmp_css['show_form']" label="true">显示form</el-radio>
-                <el-radio v-model="tmp_css['show_form']" label="false">隐藏form</el-radio>
-            </el-form-item>
-            </el-col>
-                </el-row>
+                <el-col :span="6">
+                    <el-form-item   >
+                        <el-checkbox label="显示form" border true-label="true"  false-label="false" v-model="tmp_css['show_form']"></el-checkbox>
+                    </el-form-item>
+                </el-col>
+                <el-col :span="6">
+                    <el-form-item   >
+                        <el-checkbox label="首次载入不查询" border true-label="true"  false-label="false" v-model="tmp_css['firstNoQuery']"></el-checkbox>
+                    </el-form-item>
+                </el-col>
+                <el-col :span="6">
+                    <el-form-item   >
+                        <el-checkbox label="前端校验" border true-label="true"  false-label="false" v-model="tmp_css['cr_front_validate']"></el-checkbox>
+                    </el-form-item>
+                </el-col>
+            </el-row>
             <el-row style="height: 60px;">
                 <el-col >
             <el-form-item label="布局">
-                <el-radio v-model="tmp_css['layout_mode']" label="">高度小于容器高度时自动撑满，大于时保持</el-radio>
+                <el-radio v-model="tmp_css['layout_mode']" label="0">高度小于容器高度时自动撑满，大于时保持</el-radio>
                 <el-radio v-model="tmp_css['layout_mode']" label="1">保持与设计时一样的高度</el-radio>
                 <el-radio v-model="tmp_css['layout_mode']" label="2">强制适配到容器高度</el-radio>
             </el-form-item>
@@ -114,12 +117,12 @@
 </template>
 
 <script>
-import  codemirror  from './element/vue-codemirror.vue'
+import MonacoEditor from './element/MonacoEditor';
 import  edmitormd  from './element/edmitormd.vue'
 import {test_expr} from "./api/report_api.js"
 export default {
     name: "templateManger",
-    components: {codemirror,edmitormd},
+    components: {MonacoEditor,edmitormd},
     props: [ "visible","action_target","parent_defaultsetting"],
     inject: ["context"],
     mounted(){
@@ -141,15 +144,16 @@ export default {
         return {
             data_ready:false,
             //['notebook','before_exec_script','footer2','luckysheet_conditionformat',]
-            tab_value:"notebook",
-            tmp_css:{'BACKGROUND-COLOR':'#FFF','COLOR':'#000','FONT-SIZE':'11','FONT':'微软雅黑','layout_mode':'','border_box':'div',
+            tab_value:"before_exec_script",
+            tmp_css:{'BACKGROUND-COLOR':'#FFF','COLOR':'#000','FONT-SIZE':'11','FONT':'微软雅黑','layout_mode':'0','border_box':'div',
             'show_form':'true',layout_row_height:"30",layout_colNum:24,layout_margin:"10",layout_pan_height:"100%",'row_col_gutter':'10'
-            
+            ,'firstNoQuery':'false','cr_front_validate':'false'
             },
             temp_props:[
-                {'name':'notebook','mode':"javascript",'label':'记事本','val':"11"},                
+                            
                 {'name':'before_exec_script','mode':"javascript",'label':'后端运行前脚本','val':"11"},            
-                {'name':'footer2','mode':"javascript",'label':'前端页面css和js脚本','val':"22"},
+                {'name':'footer2','mode':"html",'label':'前端页面css和js脚本','val':"22"},
+                {'name':'notebook','mode':"",'label':'记事本','val':"11"},    
             ],
             action_name:"",
             dialogVisible:false,
@@ -173,7 +177,7 @@ export default {
             let _this=this
             let test_obj=this.temp_props.filter(x=>x.name=='before_exec_script')[0]
             if(test_obj.val.trim()!=""){
-                let resp=await test_expr('{' + test_obj.val +' }')
+                let resp=await test_expr('{' + test_obj.val +' \n}')
                 if(resp.errcode!=0)
                 {
                     this.$message.error(resp.message)
@@ -205,16 +209,7 @@ export default {
             })
         
         },
-        editor_ready(name){
-            let _this=this
-            setTimeout(() => {
-                _this.$refs["editor"].forEach(x=>{
-                    x.codemirror.setSize('100%','100%')     
-                })
-                
-            } );
-           
-        }, 
+        
     }
 }
 </script>

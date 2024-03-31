@@ -1,12 +1,12 @@
 <template>
 <el-tabs v-model="tab_value" value="first" v-if="ready" style="overflow: hidden; height: 100%; width: 100%">
-    <el-tab-pane label="报表组管理" name="first">
-        <avue-crud :data="data.grp_register" :option="option_grp()" v-model="grp_obj"
-            @row-save="grp_rowSave"  @row-update="grp_rowUpdate" @row-del="grp_rowDelete"
+    <el-tab-pane label="报表组管理" name="first" style="height:100%;display: flex;" ref="manager">
+        <avue-crud :data="data.grp_register" :option="option_grp()" v-model="grp_obj" style="display: flex;flex-direction: column;height: 100%; "
+            @row-save="grp_rowSave"  @row-update="grp_rowUpdate" @row-del="grp_rowDelete" 
         >
         <template slot="db_connection_listForm">
             <avue-crud :option="db_connection_listOption()" :data="grp_obj.db_connection_list"  v-model="conn_obj"
-                @row-save="conn_rowSave"  @row-update="conn_rowUpdate" @row-del="conn_rowDelete"
+                @row-save="conn_rowSave"  @row-update="conn_rowUpdate" @row-del="conn_rowDelete"  
             >
             <template  slot="menuForm">
                 <el-button type="primary" icon="el-icon-check" size="small" plain @click.stop="test_link(conn_obj)">测试连接</el-button>
@@ -20,6 +20,7 @@
             <el-button type="primary" icon="el-icon-check" size="small" plain @click.stop="handleClone(scope.row,scope.index)">克隆</el-button>
         </template>
         </avue-crud>
+        
     </el-tab-pane>
     <el-tab-pane label="登陆验证管理" name="second" v-if="userInfo.username=='admin'" style=" height: 100%; width: 100%" >
         <div style="display:flex;height:400px;flex-direction: column;">
@@ -27,11 +28,11 @@
         传入用户名userid和口令password，返回为json，必须有errcode，userid，username。errcode为零，表示验证成功。<br>
         {'errcode':json.errcode,'message':json.errmsg, 'userid':json.userid,'username':json.username,'old_result':result};<br>以下是脚本：
         </span>
-        <codemirror  ref="editor"  v-if='tab_value=="second"'
-                        v-model="data.login_script" 
-                        style="flex:1" @ready="editor_ready"
-                        :options="{tabSize: 4, mode: 'text/javascript', lineNumbers: true,line: true,}"  
-            />
+        <MonacoEditor  v-if='tab_value=="second"' ref="editor"  theme="vs" v-model="data.login_script"
+              language="javascript"  style="flex:1;height:100%;border:solid 1px silver;margin-bottom:5px;"
+              :options="{}"  >
+        </MonacoEditor>
+
         <div>     
         测试用户<el-input v-model="test_user" placeholder="请输入内容"></el-input>
         测试口令<el-input v-model="test_password" placeholder="请输入内容"></el-input>
@@ -71,10 +72,10 @@
 
 <script>
 import {grp_list,grp_save,grp_delete,test_connection,test_login,save_config,test_zcm} from "./api/report_api"
-import  codemirror  from './element/vue-codemirror.vue'
+import MonacoEditor from './element/MonacoEditor';
 import { mapGetters } from "vuex";
 export default {
-    components: {codemirror},
+    components: {MonacoEditor},
     
     async created(){
 
@@ -108,10 +109,6 @@ export default {
                     this.data.zc_dict=ret.zc_dict
                 this.$alert(JSON.stringify(ret.zc_dict))
             }
-        },
-
-        editor_ready(){
-            this.$refs.editor.codemirror.setSize('auto','350px')
         },
         async test_link(link_obj){
             let ret=await test_connection(link_obj)
@@ -156,6 +153,9 @@ export default {
             let result=await grp_save(form)
             if(result['errcode']==0 ){
                 _this.data.grp_register.push(Object.assign({},form))
+                _this.data=await grp_list()
+                this.db_type_dict=[]
+                _this.data.link_type.forEach(x=>this.db_type_dict.push({'label':x,'value':x}))
             }
             if(done)
                 done(); 
@@ -163,8 +163,12 @@ export default {
         async grp_rowUpdate(form,index,done,loading){
             let _this=this
             let result=await grp_save(form)
-            if(result['errcode']==0 )
+            if(result['errcode']==0 ){
                 Object.assign(this.data.grp_register[index],form)
+                _this.data=await grp_list()
+                this.db_type_dict=[]
+                _this.data.link_type.forEach(x=>this.db_type_dict.push({'label':x,'value':x}))
+            }
             if(done)
                 done(); 
         },
@@ -189,10 +193,15 @@ export default {
                 });
             
       },
-        option_grp(){ return {
+        option_grp(){ 
+            let clientHeight=400
+            if(this.$refs.manager){
+                clientHeight=this.$refs.manager.$el.clientHeight
+            }
+            return {
             "addBtn": this.userInfo.username=='admin',
             "editBtn": "true",
-            
+            height:this.$el.parentElement.clientHeight - 130,
             "delBtn": this.userInfo.username=='admin',
             "saveBtn": "true",
             "column": [
@@ -240,4 +249,10 @@ return {'errcode':json.errcode,'message':json.errmsg, 'userid':json.userid,'user
 
 <style>
 .avue-crud .el-table .el-form-item{display: inline;}
+#avue-view .avue-crud__body,#avue-view .el-card__body{
+   height: 100%; 
+}
+#avue-view .el-form{
+    height: calc(100% - 40px)
+}
 </style>

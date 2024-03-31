@@ -14,7 +14,7 @@
     
     <el-row>
         <div>
-            <span>数据集</span> <el-button @click="save_data_for_init">备份</el-button>
+            <span>数据集</span> <el-button @click="save_data_for_init">备份</el-button><el-button @click="save_data_for_clear">清除备份</el-button>
             
             <el-dropdown @command="new_dataset($event)" style="float: right; padding: 3px 0">
                 <span class="el-dropdown-link">
@@ -38,7 +38,7 @@
         <img v-if="ds._type=='sql' " class="cr_icon" src="img/数据库.svg"/>
         <img v-if="ds._type=='cr'" class="cr_icon" src="img/引用.svg"/>
         <img v-if="ds._type=='from'" class="cr_icon" src="img/引用.svg"/>
-        <div @click="action_target=ds"  style="display: inline-block;width:calc(100% - 50px)">{{ds._name}} </div>
+        <div @click="choose_ds(ds)"  style="display: inline-block;width:calc(100% - 50px)">{{ds._name}} </div>
         <el-button @click="delete_dataset(ds,ds_idx)" circle plain type="danger" size="mini" icon="el-icon-minus"
             style="padding: 4px;margin-left: 5px;float:right">
         </el-button>
@@ -48,12 +48,13 @@
     <el-main>
         <div style="height:100%;display:flex;flex-direction:column" v-if="action_target!=null">
             <div style="height:50%;display:flex;flex-direction:column" >
+            <div style="flex-grow:0">
                 <el-form :inline="true" class="demo-form-inline" >
-                    <el-row><el-col :span="6">
+                    <el-row><el-col :span="4">
                         <el-form-item label="名字"><el-button type="primary" @click="update_name" >{{action_target._name}}</el-button ></el-form-item>
                     </el-col>
                     
-                    <el-col v-if="action_target._type=='sql'|| action_target._type=='db'" :span="4">
+                    <el-col v-if="action_target._type=='sql'|| action_target._type=='db'" :span="6">
                         <el-form-item label="数据源">
                             <el-select v-model="action_target._dataSource" placeholder="数据源">
                                 <el-option  v-for="(one,index) in context.report.conn_list" :key="one+index" :label="one" :value="one"></el-option>
@@ -62,9 +63,12 @@
                         </el-col>  
                         <el-col :span="4"><el-form-item label="类型" style="color:red;font-weight: 900;">{{action_target._type}} </el-form-item> </el-col>
                         <el-col v-if="action_target._type=='sql'|| action_target._type=='db'" :span="4">
-                            <el-form-item label="舍弃数值全零的行">  <el-checkbox v-model="action_target._FilterZero"></el-checkbox></el-form-item> 
+                            <el-form-item label="舍弃数值全零的行">  <el-checkbox v-model="action_target._FilterZero"  true-label="true" false-label="false"></el-checkbox></el-form-item> 
                         </el-col>
-                        <el-button  type="primary" v-if="['memory','sql','userDefine'].includes(action_target._type)"  @click="preview">取数</el-button>
+                        <el-button  type="primary" v-if="['memory','sql','userDefine'].includes(action_target._type)"  @click="sql_run">取数</el-button>
+                        <!--
+                        <el-button  type="primary" v-if="['memory','sql','userDefine'].includes(action_target._type)"  @click="manger_script">相关脚本</el-button> 
+-->
                         <el-button type="primary" v-if="action_target._type=='cr'" @click="cr_run">取数</el-button> 
                         <el-button type="primary" v-if="action_target._type=='api'" @click="api_run">取数</el-button> 
                     </el-row>
@@ -74,7 +78,7 @@
                         <div v-if="dataLengthList(action_target._name).length>1">
                             <el-tag v-for="(one,index) in dataLengthList(action_target._name)" :key="one+index" 
                                 @click="url_choose_get(index)"
-                                :style="{'font-weight':(action_target.get==index?'bold':'')}">
+                                :style="{'margin-left': '10px','font-weight':(action_target.get==index?'bold':'')}">
                                 {{index }}
                             </el-tag>
                         </div>     
@@ -98,22 +102,22 @@
                             </el-col>
                     </el-row>
                     
-                    <el-row v-if="['api','csv','cr'].includes(action_target._type)"><el-col :span="10">
+                    <el-row v-if="['api','csv','cr'].includes(action_target._type)"><el-col :span="24">
                         <div v-if="action_target._path_list">
                             <el-tag v-for="(one,index) in JSON.parse(action_target._path_list)" 
                             :key="one+index" type="danger" 
                             @click="url_choose_get(one)"  
-                            :style="{'font-weight':(action_target.get==one?'bold':'')}">{{one }}</el-tag>
+                            :style="{'margin-left': '10px','font-weight':(action_target.get==one?'bold':'')}">{{one }}</el-tag>
                             
                         </div>  
                     </el-col>
                     </el-row>
 
                     <el-row v-if="action_target._type=='from'"><el-col :span="8">
-                        挑选数据集
+                        挑选数据集  
                         <el-select v-model="action_target._dataSource" >
                             <el-option  v-for="(ds,index) in all_dataSet.filter(x=> 
-                                    ['db','sql','cr'].includes(x._type) 
+                                    ['db','sql','cr','csv'].includes(x._type) 
                                     && ((x._type!='cr' 
                                     && dataLengthList(x._name).length>1) )|| x._type=='cr')" 
                                 :key="ds._name+index" :label="ds._name" :value="ds._name"></el-option>
@@ -126,7 +130,7 @@
                         <el-col :span="8">
                             挑选内部数据集
                             <el-select v-model="action_target.__text" 
-                                    v-if="this.action_target._dataSource!=''  && ['db','sql'].includes(all_dataSet.find(a=>a._name==action_target._dataSource)._type)  " 
+                                    v-if="this.action_target._dataSource!=''  && ['db','sql','csv'].includes(all_dataSet.find(a=>a._name==action_target._dataSource)._type)  " 
                             >
                                 <el-option v-for="(one,index) in dataLengthList(action_target._dataSource).slice(1)" 
                                     :key="index" type="success" @click="url_choose_get(one)"  :label="one" :value="one" >{{one }}</el-option>
@@ -141,15 +145,13 @@
                         </el-col>
                     </el-row>
                 </el-form>
-               
-                    <codemirror   v-if="['memory','sql','userDefine','api','csv'].includes(action_target._type)"
-                                ref="editor" 
-                                v-model="action_target.__text" 
-                                style="height:100%;border:solid 1px silver;margin-bottom:5px;"
-                                :options="{tabSize: 4, mode: 'text/x-sql', lineNumbers: true,line: true,}"  
-                    />
-                   
-                    <el-table stripe border  :height="250" v-if="action_target.url_param" 
+            </div>
+            <div style="flex-grow:1;height: 40px;">  
+                <MonacoEditor  v-if="['memory','sql','userDefine','api','csv'].includes(action_target._type)"
+                    theme="vs" v-model="action_target.__text" style="height:100%;border:solid 1px silver;margin-bottom:5px;"
+                    :language="['userDefine','api'].includes(action_target._type)? 'javascript': 'sql'"    >
+                </MonacoEditor>                
+                    <el-table stripe border  :height="250"  v-if="action_target.url_param" 
                             :data="action_target.url_param"  
                         >
                         <el-table-column prop="_prompt" label="参数说明"> </el-table-column>
@@ -168,12 +170,16 @@
                             </template>
                         </el-table-column>
                     </el-table> 
+                </div>
             </div>
             <div style="height:50%;display:flex;flex-direction:column">
-                <el-upload v-if="action_target._type=='csv'" class="upload-demo" action :auto-upload="false" :show-file-list="false" :on-change="choose_file"
-                >
-                <el-button size="small" type="primary">请选择导入excel</el-button>
-                </el-upload>
+                <div style="display: flex;justify-content: space-between;">
+                    <el-upload v-if="action_target._type=='csv'" class="upload-demo" action :auto-upload="false" :show-file-list="false" :on-change="choose_file"
+                    >
+                    <el-button size="small" type="primary">请选择导入excel</el-button>
+                    </el-upload>
+                    <el-button size="small" type="primary" @click="export_excel">excel导出</el-button>
+                </div>
                 <div v-if="tableData==undefined || tableData.length==0" >无数据</div>
                 
                 <el-table stripe border  :height="250" v-if="tableData.length>0" 
@@ -201,16 +207,15 @@
 </template>
 
 <script>
-
-import  codemirror  from './element/vue-codemirror.vue'
 import ExprEditorDialog from './ExprEditorDialog.vue'
 import {request} from 'axios'
 import {baseUrl} from './api/report_api'
 import x2js from 'x2js' 
-import {convert_csv_to_json,convert_array_to_json,parse_json,json_by_path,getObjType } from "./utils/util"
+import MonacoEditor from './element/MonacoEditor';
+import {convert_csv_to_json,convert_array_to_json,parse_json,json_by_path,getObjType,saveAs,s2ab } from "./utils/util"
 export default {
     name: "datasetManger2",
-    components: {codemirror,ExprEditorDialog},
+    components: {ExprEditorDialog,MonacoEditor},
     props: { visible: Boolean},
     inject: ["context"],
     data(){
@@ -224,7 +229,6 @@ export default {
             ExprEditorDialog_visible:false,
             currentPage: 1,
             pageSize: 10
-            
         }
     },watch:{
         dialogVisible(val) {
@@ -256,8 +260,9 @@ export default {
                 if(this.action_target._type=="csv" && this.action_target.get)
                 {
                     ret=JSON.parse(this.action_target.data) [this.action_target.get]
-                    if(ret.length>0 && getObjType(ret[0])=="array" )
-                        ret=convert_array_to_json(ret)                    
+                    if(ret && ret.length>0 && getObjType(ret[0])=="array" )
+                        ret=convert_array_to_json(ret)     
+                    else return []               
                     return ret
                 }
                 else if(this.action_target._type=="from" && this.action_target._dataSource!="" && this.action_target.__text!="")
@@ -270,6 +275,13 @@ export default {
                             ret= []
                         return ret
                     }
+                    if(cur_ds._type=='csv'){
+                        ret= json_by_path(JSON.parse( cur_ds.data) ,this.action_target.__text)
+                        if(ret==undefined)
+                            ret= []
+                        console.info(ret)
+                        return convert_array_to_json (ret)
+                    }
                     if(cur_ds.report_result){
                         ret=this.choose_cr_ds(cur_ds.report_result,this.action_target.__text)
                         return ret
@@ -277,11 +289,13 @@ export default {
                     }
                     else
                     {
-                        let data=this.context.report_result.dataSet[cur_ds._name][this.action_target.__text||0]
-                        if (data && data.length>1){
-                            this.action_target._fields=JSON.stringify(data[0])
-                            ret= convert_array_to_json(data)
-                            return ret
+                        if(this.context?.report_result?.dataSet && this.context.report_result.dataSet[cur_ds._name]){
+                            let data=this.context.report_result.dataSet[cur_ds._name][this.action_target.__text||0]
+                            if (data && data.length>1){
+                                this.action_target._fields=JSON.stringify(data[0])
+                                ret= convert_array_to_json(data)
+                                return ret
+                            }
                         }
                     }
                         
@@ -329,15 +343,16 @@ export default {
        
     },
     
-    methods:{        
-        preview(){
-            if(this.context.in_exec_url.stat){
-                this.$notify({title: '提示',message: "已经在执行一个查询！",type: 'error',duration:3000});
-                return
-            }
+    methods:{ 
+        export_excel(){
+            let ws= XLSX.utils.json_to_sheet(this.tableData)
+            let wb = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(wb, ws,'数据');
+            let wopts = { bookType: 'xlsx', bookSST: true, type: 'binary' };//这里的数据是用来定义导出的格式类型 
+            saveAs(new Blob([s2ab(XLSX.write(wb, wopts))], { type: "application/octet-stream"}), "这里是下载的文件.xlsx");
+        },
+        report_content(){
             let x2jsone=new x2js(); //实例
-            let _this=this
-            let data=new FormData();
             let t_content_json=JSON.parse(JSON.stringify(this.context.report))
             this.all_dataSet.forEach(one=>{
                 if(['cr','api'].includes( one._type)){
@@ -349,7 +364,16 @@ export default {
             JSON.parse(JSON.stringify(this.all_dataSet)).forEach(ele=>{
                 t_content_json.dataSets.dataSet.push(ele)
             })
-            data.append("_content", x2jsone.js2xml({report:t_content_json}) )
+            return x2jsone.js2xml({report:t_content_json})
+        },    
+        sql_run(){
+            if(this.context.in_exec_url.stat){
+                this.$notify({title: '提示',message: "已经在执行一个查询！",type: 'error',duration:3000});
+                return
+            }
+            let _this=this
+            let data=new FormData();
+            data.append("_content", this.report_content())
             data.append("_createFormParam", false )
             data.append("_fresh_ds", JSON.stringify(['数据集:'+this.action_target._name]))
             _this.context.in_exec_url.stat=true;
@@ -390,6 +414,10 @@ export default {
         dataLengthList(ds_name){
             let ret=[]
             let i=0
+            var cur_ds=this.all_dataSet.filter(x=>x._name==ds_name)[0]
+            if(cur_ds._type=='csv'){
+               return Object.keys(JSON.parse(cur_ds.data) )
+            }
             if (ds_name!='' && Object.keys(this.context.report_result).length>1){
                 this.context.report_result.dataSet[ds_name]?.forEach(one=>
                     {
@@ -432,6 +460,7 @@ export default {
                     background: 'rgba(0, 0, 0, 0.7)'
                     });
             let data=new FormData();
+            data.append("report_content", this.report_content())
             data.append("expr", `return web_request({'url':'${this.action_target._dataSource}','headers':{'needType':'json' } } );`)
             let grpid=_this.context.report.reportName.split(":")[0]
             request({
@@ -467,6 +496,7 @@ export default {
         api_run(){
             let _this=this
             let data=new FormData();
+            data.append("report_content", this.report_content())
             data.append("expr", this.action_target.__text )
             let grpid=_this.context.report.reportName.split(":")[0]
             request({
@@ -564,7 +594,7 @@ export default {
             .then( ({ value }) => {
                  if(_this.has_name(value))
                     return
-                _this.action_target={__text:' ',_dataSource:'',_name:value,_type:command,_fields:"[]",_FilterZero:false}
+                _this.action_target={__text:' ',_dataSource:'',_name:value,_type:command,_fields:"[]",_FilterZero:'false'}
                 if(command=="memory"){
                     _this.action_target._dataSource="memory"
                 }
@@ -608,18 +638,76 @@ innerReport(); //设计好的报表页面选中有关单元格，复制粘贴到
                 }
             }).catch(function () {});
         },
+        save_data_for_clear(){
+            this.context.report.template.before_exec_script=this.context.report.template.before_exec_script.replace(/\/\/-- 开始备份数据.*?\/\/-- 结束备份数据/igs,"").trim()
+            this.$message({
+          message: '清除备份成功。',
+          type: 'success'
+        });
+        },
     save_data_for_init(){
         if(this.context.report.template==undefined)
             this.context.report.template={}
-        this.context.report.template.before_exec_script=`
-        var _init_dataset_dict_=
-            ${ JSON.stringify(this.context.report_result.dataSet,null).replaceAll("{}",null).replaceAll("],[","],\n[")};
-        `
+        let t_d={}
+        this.all_dataSet.filter(x=>x._dataSource!="memory").map(x=>t_d[x._name]=this.context.report_result.dataSet[x._name])
+        let txt=`
+//-- 开始备份数据
+var _init_dataset_dict_=
+    ${ JSON.stringify(t_d,null).replaceAll("{}",null).replaceAll("],[","],\n[")};
+//-- 结束备份数据
+`;
+        if(this.context.report.template.before_exec_script)
+            this.context.report.template.before_exec_script=this.context.report.template.before_exec_script.replace(/\/\/-- 开始备份数据.*?\/\/-- 结束备份数据/igs,"").trim()+txt
+        else
+            this.context.report.template.before_exec_script=txt
         this.$message({
-          message: '备份成功。下一次报表运算将会离线运行。你可以在设置(后端运行前脚本)中，删除相应备份数据，以恢复正常运行。',
+          message: '备份成功。下一次报表运算将会离线运行。',
           type: 'success'
         });
          
+    },
+    manger_script(){
+        let _this=this
+        this.action_target.script
+        _this.$DialogForm.show({
+            title: '弹窗页面',  width: '80%',  menuPosition:'right',
+            data:{script:'xxxxx'},
+            option:{
+                submitText: '完成',span:24,
+                column: [
+                    {label: '多选',prop: 'pri_key',type: 'checkbox',span:24, min:1,dicData:JSON.parse(this.action_target._fields).map(x=>{ return {label:x,value:x } })
+                    ,rules: [{required: true,message: "请输入",trigger: "blur"}]
+                    },
+                    {label:'多文本框',  minRows: 18,  prop:'script',type:'textarea'}]
+            },
+            beforeClose: (done) => {
+                _this.$message.success('关闭前方法')
+                done()
+            },
+            callback:(res)=>{
+                console.log(res.data);
+                _this.$message.success('关闭等待框')
+                setTimeout(() => {
+                res.done()
+                setTimeout(() => {
+                    _this.$message.success('关闭弹窗')
+                    res.close()
+                }, 1000)
+                }, 1000)
+            }            
+        })
+            
+    },
+    choose_ds(ds){
+        if(ds.url_param && Array.isArray(ds.url_param)==false){
+            ds.url_param=[ds.url_param]
+        }
+        if(ds._type=='sql' ){
+            //if(ds._back_split_page==undefined) this.$set(ds,'_back_split_page',false)
+            if(ds._FilterZero==undefined) this.$set(ds,'_FilterZero','false')
+        }
+        this.action_target=ds
+        //if(this.action_target.__text)this.action_target.__text=this.action_target.__text.replaceAll("\r",'')
     },
     choose_file(file) {
       this.file = file.raw;//这是element的导入数据选择，必须要添加.raw才能获取，其他表单不需要
@@ -650,12 +738,12 @@ innerReport(); //设计好的报表页面选中有关单元格，复制粘贴到
           //console.log(_this.excelTableData)//未转换key值的数据
           // this.changeKey(excelData)//调用转换key值
         } catch (e) {
-          this.$message.danger('文件类型不正确');
+          _this.$message.danger(`文件类型不正确:${e}`);
         }
       };
       //读取文件
       fileReader.readAsBinaryString(file);
-    },
+    }
     }
 }
 </script>

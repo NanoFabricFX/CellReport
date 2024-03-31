@@ -160,21 +160,38 @@ http {
 - 在《设置模板》中设置报表运行前的脚本（后端运行前脚本）添加代码：
  
 ~~~js
-function resetDefaultParam(name){
-	if(name=='branch_no')//如果参数名是branch_no ，那么缺省参数就是改为 xxxxx
-		return 'xxxxx';
-}
+function resetDefaultParam(param_name,param_row){ //param_row 参数可以动态修改参数定义，下面例子是修改下拉可选项
+    __env__.logger.info(param_name+'---'+param_row.getData("value"));
+    if(param_name=="abc"){
+      if(你的判断成立){
+        param_row.setData("allowCreate", true);// 设置为可动态添加
+        param_row.setData("tagValueList", [['A','1'],['B','2']]);// 动态添加可选项
+      }
+      // param_row.setData("Inner", true);// 设置为内部参数，前端将看不到hidden ，但后端是可用的
+      // param_row.setData("default_value", '1');// 设置为缺省值，或者用下行的方式返回缺省值
+      return '1';//返回缺省值
+    }
+     
+  }
 ~~~
 
 ## 参数的最终重置
 
 ~~~js
-function lastSetParam(name){
+function lastSetParam(name,param_row){
 	if(name=='branch_no')//如果参数名是branch_no ，那么最终参数就是改为 xxxxx,不管用户输入的是什么，都改
 		return 'xxxxx';
 }
 ~~~
+## 数据集取数完成后执行的动作
 
+可以定义\_after_calc_dataset_这个函数，使得在数据集取数完成后，执行特定动作：
+``` js
+function _after_calc_dataset_(){
+   _zb_var_.my_ds_cnt= 部位2.count();// 将部位2 数据集的行数存到_zb_var_.my_ds_cnt
+}
+
+```
 ## 前端隔行变色和条件颜色的配置
 
 全局缺省配置，在安装目录的template.xml的footer2中。可以视情况修改
@@ -196,19 +213,21 @@ window.luckysheet_alternateformat_save='{"cellrange":{"row":[0,8],"column":[-1,-
 
 ## 前端的公共数据
 - 前端组件的《编辑内容》中，可以使用以下参数引用后端传过来的数据.可以通过添加《动态模板》，将以下代码片段复制到内容里面做测试，以便找到适合自己使用的代码。
+- 在组件中调用全局数据要使用 _this.context
 ~~~js
-    context.clickedEle['test'] //点击test 元素后选中的数据，这里的元素指的是页面上的可点击单元。
+    _this.context.clickedEle['test'] //点击test 元素后选中的数据，这里的元素指的是页面上的可点击单元。
     //结构为:{data:deepClone(cur_data[0]),cell:cell.innerText,column}
     
-    context.report_result.dataSet //sql 结果数据，只有在设计预览状态，或设置变量_need_dataset_=True时才会有这个数据 
+    _this.context.report_result.dataSet //sql 结果数据，只有在设计预览状态，或设置变量_need_dataset_=True时才会有这个数据 
     // 内部为多个array ，每一个代表的都是数据集。如 context.report_result.dataSet['test'][0] 是数组。 里面才是真正的数据,第一行是表头，其他是数据
     // 可以简写：
-	dataset('累计')
-
-    context.report_result.data['main'] //页面上名字叫main 的报表数据。
+	  _this.dataset('累计')
+    
+    _this.context.report_result.data['main'] //页面上名字叫main 的报表数据。
     // 格式为：{columns:[],tableData:[],colName_lines:[0,2],extend_lines:[4,22]} ,
     // tableData 存放的所有单元格的数据。colName_lines 列标题起止范围，extend_lines 明细行起止范围
-    
+    _this.context.queryForm //当前报表参数，可以修改，然后调用下面的submit提交
+    _this.context.rpt_this.submit() //提交查询
     self 配置
     
 ~~~
@@ -219,6 +238,26 @@ window.luckysheet_alternateformat_save='{"cellrange":{"row":[0,8],"column":[-1,-
 ``` tip
 水印设置，请在后端运行前设置中，加代码`_zb_var_.watermark="abcdr"; //设置水印,可以动态赋值，方便设置工号姓名之类的动态水印`
 ```
+**缺省水印配置**
+``` js
+_zb_var_.watermark={
+        watermark_txt: "text",
+        watermark_x: 20, //水印起始位置x轴坐标
+        watermark_y: 20, //水印起始位置Y轴坐标
+        watermark_rows: 20, //水印行数
+        watermark_cols: 20, //水印列数
+        watermark_x_space: 100, //水印x轴间隔
+        watermark_y_space: 50, //水印y轴间隔
+        watermark_color: '#aaa', //水印字体颜色
+        watermark_alpha: 0.4, //水印透明度
+        watermark_fontsize: '15px', //水印字体大小
+        watermark_font: '微软雅黑', //水印字体
+        watermark_width: 110, //水印宽度
+        watermark_height: 40, //水印长度
+        watermark_angle: 20 //水印倾斜度数
+    }
+
+```
 
 ## 前端动态模板数据设置
 ### 动态模板中可能会用到的数据转换
@@ -227,6 +266,9 @@ window.luckysheet_alternateformat_save='{"cellrange":{"row":[0,8],"column":[-1,-
 |`dataset('累计')[0]`  | 取数据集：累计 的列名 |
 | `dataset('累计').slice(1)` | 取数据集的数据 |
 |`Enumerable.from(dataset('累计')).skip(1).select(x=> {return {'name':x[0],value:x[1]} }).toArray()` | 转换数据集累计中的数据为对象：name属性对应第一列，value对应第二列 ，最后转换为数组返回|
+
+
+
 ~~~html
 <dv-scroll-board :config="{
             header: dataset('累计')[0],
@@ -277,7 +319,7 @@ style标签包起来的部分，将会在报表展现前注入当前页面的样
 - 
 ```
 <script> 
-window.after_show_report_hook=function(){
+window.after_show_report_hook=function(){ //这个函数会在显示完报表后调用
   	console.info("function report_after_show exec")
 }
 
@@ -292,7 +334,7 @@ console.info(_this) //d打印_this的内容到控制台。这仅仅是测试，�
 
 ### 定时刷新
 点报表设置，选 前端页面css和js脚本 ，添加内容，：
-
+``` js
 <script>
   _this.setTimeout_second=10 //刷新间隔10秒
   _this.setTimeout_function=function(p_this){
@@ -301,6 +343,7 @@ console.info(_this) //d打印_this的内容到控制台。这仅仅是测试，�
       console.info("xxx")
  }
 </script>
+```
 
 ## 前端动态模板
 - 在页面上添加的动态模板，内部脚本是经过简化的vue格式。主要区别是：script中定义的data、methods、computed会直接注入当前模板中，其他vue属性暂时不支持。
@@ -332,7 +375,7 @@ console.info(_this) //d打印_this的内容到控制台。这仅仅是测试，�
            console.info("success")
        })
    }
-   return {
+   export default {
      data:{ 
        my_t_data1:'test_data1',
        my_t_data2:'test_data2',
@@ -413,7 +456,59 @@ hasOption 是为了动态初始化option，他总是返回true。
 <dv-water-level-pond :config=" {data: [<t>value</t>]}" style="width:100%;height:100%;" />
 
 ```          
-::: tips
+::: warning
 1、标签间的模板一定要用{{  }} 包起来
 2、标签属性中使用模板，一定使用双引号。因为在做模板替换的时候，字符串将会用单引号。
 :::
+
+## 前端调用后端的自定义函数
+
+如果已定义后端自定义函数：
+``` js
+  //这类函数只接收一个参数。如果是多个参数，可以打包多个参数到一个对象中传递
+  function test_func(para){
+    __env__.logger.info(" 前端调用后端的测试:"+json_stringify(para));
+    return  {a:2,b:3,para};// 测试将这个数据重新传回给前端
+  }
+```
+前端任意可以使用js 的地方，都可以通过call_server_func直接调用到后端函数：
+``` js
+  cellreport.call_server_func(`test_func`,{a:1,desc:'前端'},`/run:example?reportName=/`).then(data=>{
+    console.info(data) // 输出 : {a: 2, b: 3, para: {…}}
+  })
+  
+```
+`call_server_func(func_name,func_params,_this,get_post='post')`
+第一个参数 func_name: 后端已定义的函数名称
+第二个参数 func_params：后端函数需要的参数,必须是一个对象，如：{a:1,b:[1,2,]},后端将以同样的方式取出
+第三个参数 ：如果是字符串，就是将当前字符串作为url 传递给后端(通过这种方式手动执行指定报表组中的函数)，否则，就从_this 中解析出当前网页的url(组件中调用的话，直接传this就行)，传递给后端. 
+第四个参数 get_post : 提交给后台时使用的http 提交方式
+
+## 前端使用js的一些控制选项
+
+- window.cellreport.show_tips 是否显示右上角的提示信息，这个信息是后台传过来的。
+
+- ```window.cellreport.cr_login_verfiy_code_type='text';```  设计器登陆验证方式：
+  text，纯前端（已经显示了。重输入一遍就可以）。
+  img:`${baseUrl}/VerifyCode` 后端要编写这个代码
+  其他:用其他方式（如手机验证码）验证，需要后端代码配合。也是修改 UserController.cs中的VerifyCode
+
+- ```window.cellreport["expand_form"]``` 手机端是否显示收缩查询输入图标（控制查询输入是否显示）
+- ```window.cellreport.cr_export_excel_func``` 导出excel 时调用的监控函数。通常需要传给后端记录
+- ```window.cellreport[`cr_click_${gridName}`](p_data,this)``` 点击某个组件后调用的函数，p_data 是传递的数据，this表示的是调用函数的组件.
+只有报表、echarts 有缺省的点击事件，可以直接调用click事件。如果是其他组件，需要自己写有关的click，如果需要刷新数据集，自己组装_this.context.clickedEle以及调用click_fresh.
+
+- window.cellreport.hn_old 控制列表头上的链接是否有用
+- window.cellreport.cr_close_fresh_message=true 关闭组件刷新提示 
+- window.cellreport.cr_hover_row   鼠标悬停时使用的格式 缺省值：'{background-color:lightgray!important;}'
+- window.cellreport.cr_active_row  鼠标点选后时使用的格式  缺省值：'{background-color: #7cbcfc!important;}'
+- window.cellreport.call_server_func 不要修改。这是调用后端使用的函数入口
+- window.cellreport.map_url 地图地址。格式：`${default_map_url}/${code}_full.json` 。如果地图存放到了static/GeoJSON下，可以设置为static/GeoJSON
+- window.cellreport.pdf_print  pdf预览时，如果为true直接显示打印预览，不设置或false，将显示中间预览，以便调整或另存到本地
+- window.cellreport.form_validate(queryForm)  form提交时的表单校验。queryForm的属性就是报表用到的参数,返回true表示校验通过，false或字符串表示校验不通过，返回字符串时将作为错误信息显示到浏览器
+- window.cellreport.convert_col_to_button 手机端是否将多层表头转换为按钮显示
+- window.cellreport.cfc_max_line 缺省值1000。在设计器使用条件格式菜单设置的条件格式化计算的最大行数，超过这个行数就不计算。
+## 查找组件和显示组件对话框
+this.findElelment("line_832",{parent_obj:null,dialog_params:{title:'标题'},params:{style:"height:50vh"} }) 
+this.showDialog("line_832",{parent_obj:null,dialog_params:{title:'标题'},params:{style:"height:50vh"} )
+dialog_params 是el-dialog的参数。params是包裹组件的div 的参数

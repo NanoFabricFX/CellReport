@@ -10,14 +10,15 @@ CellReport 诞生的初衷是为了解决日常快速制作统计报表的需要
  | [Gitee](https://gitee.com/noneday/CellReport)| [Gitee在线文档](https://noneday.gitee.io/CellReport) | [gitee下载](https://gitee.com/NoneDay/CellReport/releases/)  |
  
   **这个链接是[B站教学视频，关注可以及时接收最新教学](https://space.bilibili.com/479725817?spm_id_from=333.337.0.0)** 
-
+  
+  **[演示地址](http://20.169.235.199/) 测试用户/密码: test/123456**
 
 ## 主要特点：
 - 支持所有常规的清单、分组、交叉。
 - 多源、分片
 - **多数据集的集合运算**
 - **单元格扩展、引用**
-- **内置类js语言引擎**
+- **内置类js语言引擎** 可以使你自己的程序具有自定义脚本功能
 - 丰富的函数定义
 - 可自定义扩展函数
 - 页面元素丰富。预定义有报表组件、echart组件、数据展现组件等
@@ -86,6 +87,9 @@ Database=dbname;Data Source=x.x.x.x;Port=3306;User Id=xxx;Password=****;Charset=
 
 pgsql 连接串 格式
 server=ip地址;port=5432;uid=用户;pwd=口令;database=数据库;Pooling=true;
+
+达梦 连接串 格式
+Server=ip地址:端口; UserId=用户; PWD=口令;
 ```
 
 配置完毕后，按F5 刷新页面，点报表目录，正常的话，这是应该能看到所有的测试报表了
@@ -94,7 +98,9 @@ server=ip地址;port=5432;uid=用户;pwd=口令;database=数据库;Pooling=true;
 CellReport使用Apache License 2.0 开源协议
 如果您需要商用，请联系作者获取商业授权
 
-## 报表交流qq群 860056080
+## 报表交流qq群 
+①群已满 860056080
+②群 704904302
 
 ## 本软件使用到的的第三方软件，在此一并致谢
 前端： [luckysheet](https://github.com/mengshukeji/Luckysheet) ，vue ，element-ui, [avuejs](http://avuejs.com)
